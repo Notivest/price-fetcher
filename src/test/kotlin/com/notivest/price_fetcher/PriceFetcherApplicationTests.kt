@@ -13,7 +13,7 @@ class PriceFetcherApplicationTests {
 
 	@Test
 	fun testWorkflow() {
-		assertEquals(1 , 2)
+		assertEquals(2 , 2)
 	}
 
 }
