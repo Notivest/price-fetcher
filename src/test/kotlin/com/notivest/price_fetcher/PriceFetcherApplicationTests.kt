@@ -11,9 +11,4 @@ class PriceFetcherApplicationTests {
 	fun contextLoads() {
 	}
 
-	@Test
-	fun testWorkflow() {
-		assertEquals(2 , 2)
-	}
-
 }
