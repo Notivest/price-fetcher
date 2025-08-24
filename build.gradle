@@ -3,6 +3,7 @@ plugins {
 	id 'org.jetbrains.kotlin.plugin.spring' version '1.9.25'
 	id 'org.springframework.boot' version '3.4.6'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id "org.jlleitschuh.gradle.ktlint" version "12.1.1"
 }
 
 group = 'com.notivest'
@@ -24,6 +25,25 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	implementation "org.jetbrains.kotlin:kotlin-reflect"
+	implementation "org.springframework.boot:spring-boot-starter-web"
+	implementation "org.springframework.boot:spring-boot-starter-actuator"
+	implementation "com.fasterxml.jackson.module:jackson-module-kotlin"
+	implementation "org.jetbrains.kotlin:kotlin-reflect"
+
+
+	testImplementation "org.springframework.boot:spring-boot-starter-test"
+
+	implementation "org.springframework.boot:spring-boot-starter-web"       // controllers
+	implementation "org.springframework.boot:spring-boot-starter-webflux"   // WebClient
+	implementation "com.fasterxml.jackson.module:jackson-module-kotlin"
+	implementation "org.jetbrains.kotlin:kotlin-reflect"
+	implementation "org.springframework.boot:spring-boot-starter-actuator"
+
+	testImplementation "org.springframework.boot:spring-boot-starter-test"
+	testImplementation "com.squareup.okhttp3:mockwebserver:4.12.0"
+	testImplementation "org.springframework.boot:spring-boot-starter-webflux" // For WebTestClient
+	testImplementation "org.mockito.kotlin:mockito-kotlin:5.2.1"
 }
 
 kotlin {
