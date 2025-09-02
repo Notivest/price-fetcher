@@ -2,6 +2,8 @@ package com.notivest.pricefetcher.controllers
 
 import com.notivest.pricefetcher.models.SymbolId
 import com.notivest.pricefetcher.models.Timeframe
+import com.notivest.pricefetcher.security.AllowBothCallTypes
+import com.notivest.pricefetcher.security.logCaller
 import com.notivest.pricefetcher.service.MarketDataService
 import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
@@ -18,6 +20,10 @@ class HistoricalController(
   private val logger = LoggerFactory.getLogger(HistoricalController::class.java)
 
   @GetMapping("/historical")
+  @AllowBothCallTypes(
+    userScopes = ["read:market-data"],
+    serviceScopes = ["read:market-data", "service:internal"]
+  )
   fun historical(
     @RequestParam symbol: String,
     @RequestParam from: String,
@@ -25,6 +31,8 @@ class HistoricalController(
     @RequestParam tf: String = "T1D",
     @RequestParam(required = false, defaultValue = "true") adjusted: Boolean,
   ): ResponseEntity<Any> {
+    logger.logCaller("Historical data", "for symbol", symbol, "from", from, "to", to)
+    
     return try {
       // Validate inputs
       if (symbol.isBlank()) {

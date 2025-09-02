@@ -1,6 +1,9 @@
 package com.notivest.pricefetcher.controllers
 
 import com.notivest.pricefetcher.models.SymbolId
+import com.notivest.pricefetcher.security.AllowBothCallTypes
+import com.notivest.pricefetcher.security.UnifiedContext
+import com.notivest.pricefetcher.security.logCaller
 import com.notivest.pricefetcher.service.MarketDataService
 import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
@@ -15,9 +18,14 @@ class QuotesController(
   private val logger = LoggerFactory.getLogger(QuotesController::class.java)
 
   @GetMapping("/quotes")
+  @AllowBothCallTypes(
+    userScopes = ["read:prices"],
+    serviceScopes = ["read:prices", "service:internal"]
+  )
   fun getQuotes(
     @RequestParam symbols: String,
   ): ResponseEntity<Any> {
+    logger.logCaller("Quotes", "with scopes:", UnifiedContext.getCurrentContext()?.scopes ?: emptySet<String>())
     return try {
       // Validate input
       if (symbols.isBlank()) {

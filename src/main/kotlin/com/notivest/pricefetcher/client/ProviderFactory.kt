@@ -15,8 +15,4 @@ class ProviderFactory(
       "POLYGON" -> polygon
       else -> finnhub
     }
-
-  fun quotesProvider(): MarketDataProvider = finnhub
-
-  fun historicalProvider(): MarketDataProvider = polygon
 }

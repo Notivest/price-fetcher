@@ -5,7 +5,6 @@ import com.notivest.pricefetcher.models.MarketClock
 import com.notivest.pricefetcher.models.RefreshPolicy
 import com.notivest.pricefetcher.repositories.interfaces.QuoteRepository
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 
@@ -16,7 +15,6 @@ class RefreshScheduler(
   private val quotes: QuoteRepository,
   private val marketClock: MarketClock,
   private val policy: RefreshPolicy,
-  @Value("\${pricefetcher.quotes.refresh-ms:2000}") private val refreshMs: Long,
 ) {
   private val logger = LoggerFactory.getLogger(RefreshScheduler::class.java)
 

@@ -1,5 +1,6 @@
 package com.notivest.pricefetcher.controllers
 
+import com.notivest.pricefetcher.security.RequireScope
 import com.notivest.pricefetcher.service.MarketDataService
 import com.notivest.pricefetcher.service.WatchListService
 import org.slf4j.LoggerFactory
@@ -15,6 +16,7 @@ class PrefetchController(
   private val logger = LoggerFactory.getLogger(PrefetchController::class.java)
 
   @PostMapping("/prefetch")
+  @RequireScope("write:prices")
   fun prefetch(): ResponseEntity<Map<String, Any>> {
     return try {
       val enabledSymbols = watchListService.enabledSymbols()
