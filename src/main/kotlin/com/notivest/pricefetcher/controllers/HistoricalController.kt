@@ -22,7 +22,7 @@ class HistoricalController(
   @GetMapping("/historical")
   @AllowBothCallTypes(
     userScopes = ["read:market-data"],
-    serviceScopes = ["read:market-data", "service:internal"]
+    serviceScopes = ["read:market-data", "service:internal"],
   )
   fun historical(
     @RequestParam symbol: String,
@@ -32,7 +32,7 @@ class HistoricalController(
     @RequestParam(required = false, defaultValue = "true") adjusted: Boolean,
   ): ResponseEntity<Any> {
     logger.logCaller("Historical data", "for symbol", symbol, "from", from, "to", to)
-    
+
     return try {
       // Validate inputs
       if (symbol.isBlank()) {

@@ -8,9 +8,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 @Configuration
 @ConditionalOnProperty(name = ["pricefetcher.security.audit.enabled"], havingValue = "true")
 class SecurityWebConfig(
-  private val auditInterceptor: AuditInterceptor
+  private val auditInterceptor: AuditInterceptor,
 ) : WebMvcConfigurer {
-  
   override fun addInterceptors(registry: InterceptorRegistry) {
     registry.addInterceptor(auditInterceptor)
       .addPathPatterns("/**")

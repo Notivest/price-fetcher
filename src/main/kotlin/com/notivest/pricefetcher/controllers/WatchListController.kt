@@ -24,7 +24,7 @@ class WatchListController(
   @GetMapping("/watchlist")
   @AllowBothCallTypes(
     userScopes = ["read:prices"],
-    serviceScopes = ["read:prices", "service:internal"]
+    serviceScopes = ["read:prices", "service:internal"],
   )
   fun list(): ResponseEntity<List<WatchListItem>> {
     logger.logCaller("Watchlist")
@@ -34,7 +34,7 @@ class WatchListController(
   @PostMapping("/watchlist")
   @AllowBothCallTypes(
     userScopes = ["write:prices"],
-    serviceScopes = ["write:prices", "service:internal"]
+    serviceScopes = ["write:prices", "service:internal"],
   )
   fun add(
     @RequestBody body: WatchListItem,
@@ -51,7 +51,7 @@ class WatchListController(
   @PatchMapping("/watchlist/{symbol}")
   @AllowBothCallTypes(
     userScopes = ["write:prices"],
-    serviceScopes = ["write:prices", "service:internal"]
+    serviceScopes = ["write:prices", "service:internal"],
   )
   fun patch(
     @PathVariable symbol: String,
@@ -69,7 +69,7 @@ class WatchListController(
   @DeleteMapping("/watchlist/{symbol}")
   @AllowBothCallTypes(
     userScopes = ["write:prices"],
-    serviceScopes = ["write:prices", "service:internal"]
+    serviceScopes = ["write:prices", "service:internal"],
   )
   fun delete(
     @PathVariable symbol: String,

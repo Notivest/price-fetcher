@@ -20,7 +20,7 @@ class QuotesController(
   @GetMapping("/quotes")
   @AllowBothCallTypes(
     userScopes = ["read:prices"],
-    serviceScopes = ["read:prices", "service:internal"]
+    serviceScopes = ["read:prices", "service:internal"],
   )
   fun getQuotes(
     @RequestParam symbols: String,

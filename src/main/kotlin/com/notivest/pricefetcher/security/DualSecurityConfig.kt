@@ -20,9 +20,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 class DualSecurityConfig(
   private val dualAuthenticationFilter: DualAuthenticationFilter,
   private val dualAuthenticationEntryPoint: DualAuthenticationEntryPoint,
-  @Value("\${pricefetcher.security.jwt.domain:your-domain.auth0.com}") private val jwtDomain: String
+  @Value("\${pricefetcher.security.jwt.domain:your-domain.auth0.com}") private val jwtDomain: String,
 ) {
-  
   @Bean
   @Order(1)
   @ConditionalOnProperty(name = ["pricefetcher.security.enabled"], havingValue = "true", matchIfMissing = true)
@@ -34,21 +33,16 @@ class DualSecurityConfig(
         auth
           // Health checks sin autenticación
           .requestMatchers("/health", "/actuator/**").permitAll()
-          .requestMatchers("/info/**").permitAll()
-          
           // Endpoints públicos de cotizaciones (para usuarios via Gateway)
           .requestMatchers("GET", "/quotes/**", "/historical/**").hasAuthority("read:prices")
           .requestMatchers("POST", "/prefetch").hasAuthority("write:prices")
-          
           // Watchlist endpoints
           .requestMatchers("GET", "/watchlist/**").hasAuthority("read:prices")
           .requestMatchers("POST", "/watchlist/**").hasAuthority("write:prices")
           .requestMatchers("PATCH", "/watchlist/**").hasAuthority("write:prices")
           .requestMatchers("DELETE", "/watchlist/**").hasAuthority("write:prices")
-          
           // Todos los endpoints están disponibles para ambos tipos de calls
           // La validación específica se hace con annotations en controllers
-          
           // Todo lo demás requiere autenticación
           .anyRequest().authenticated()
       }
@@ -69,7 +63,7 @@ class DualSecurityConfig(
       }
       .build()
   }
-  
+
   @Bean
   @ConditionalOnProperty(name = ["pricefetcher.security.jwt.enabled"], havingValue = "true", matchIfMissing = true)
   fun jwtDecoder(): JwtDecoder {

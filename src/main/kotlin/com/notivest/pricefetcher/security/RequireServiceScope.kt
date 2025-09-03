@@ -2,7 +2,7 @@ package com.notivest.pricefetcher.security
 
 /**
  * Annotation para requerir scopes específicos en métodos de controller para calls de servicio
- * 
+ *
  * Uso:
  * @RequireServiceScope("read:prices")
  * @RequireServiceScope("write:prices", "admin:all")  // Requiere cualquiera de los dos
@@ -18,5 +18,5 @@ annotation class RequireServiceScope(vararg val value: String)
 @Retention(AnnotationRetention.RUNTIME)
 annotation class AllowBothCallTypes(
   val userScopes: Array<String> = [],
-  val serviceScopes: Array<String> = []
+  val serviceScopes: Array<String> = [],
 )

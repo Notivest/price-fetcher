@@ -1,5 +1,6 @@
 package com.notivest.pricefetcher.controllers
 
+import com.notivest.pricefetcher.config.TestSecurityConfig
 import com.notivest.pricefetcher.models.Candle
 import com.notivest.pricefetcher.models.CandleSeries
 import com.notivest.pricefetcher.models.SymbolId
@@ -10,7 +11,9 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
+import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
+import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -19,6 +22,8 @@ import java.math.BigDecimal
 import java.time.Instant
 
 @WebMvcTest(HistoricalController::class)
+@Import(TestSecurityConfig::class)
+@ActiveProfiles("test")
 class HistoricalControllerTest {
   @Autowired
   private lateinit var mockMvc: MockMvc

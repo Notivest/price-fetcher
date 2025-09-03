@@ -1,5 +1,6 @@
 package com.notivest.pricefetcher.controllers
 
+import com.notivest.pricefetcher.config.TestSecurityConfig
 import com.notivest.pricefetcher.models.SymbolId
 import com.notivest.pricefetcher.service.MarketDataService
 import com.notivest.pricefetcher.service.WatchListService
@@ -7,13 +8,17 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
+import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
+import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 
 @WebMvcTest(PrefetchController::class)
+@Import(TestSecurityConfig::class)
+@ActiveProfiles("test")
 class PrefetchControllerTest {
   @Autowired
   private lateinit var mockMvc: MockMvc

@@ -39,7 +39,6 @@ class RefreshSchedulerTest {
         quotes = quoteRepository,
         marketClock = marketClock,
         policy = refreshPolicy,
-        refreshMs = 2000L,
       )
   }
 
