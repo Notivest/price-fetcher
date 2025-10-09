@@ -46,23 +46,6 @@ class SecurityConfig(
       .authorizeHttpRequests {
         // Endpoints públicos
         it.requestMatchers("/health", "/actuator/health", "/actuator/info").permitAll()
-
-        // por scope/permission
-        it.requestMatchers("/historical/**")
-          .hasAuthority("SCOPE_read:historical")
-
-        it.requestMatchers(HttpMethod.POST, "/watchlist")
-          .authenticated()
-        it.requestMatchers("/watchlist/**")
-          .hasAuthority("SCOPE_write:watchlist")
-
-        it.requestMatchers("/prefetch/**")
-          .hasAuthority("SCOPE_manage:prefetch")
-
-        // administración
-        it.requestMatchers("/actuator/**")
-          .hasAuthority("SCOPE_admin:actuator") // o SCOPE_admin:all
-
         // resto
         it.anyRequest().authenticated()
       }

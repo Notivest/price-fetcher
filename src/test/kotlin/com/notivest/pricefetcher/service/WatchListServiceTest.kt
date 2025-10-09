@@ -32,6 +32,30 @@ class WatchListServiceTest {
   }
 
   @Test
+  fun `should ensure symbol is added when missing`() {
+    val symbol = SymbolId.parse("AAPL")
+    val item = WatchListItem("AAPL", enabled = true)
+    whenever(repository.add(item)).thenReturn(true)
+
+    service.ensureEnabled(symbol)
+
+    verify(repository).add(item)
+  }
+
+  @Test
+  fun `should enable symbol when already in watchlist`() {
+    val symbol = SymbolId.parse("AAPL")
+    val item = WatchListItem("AAPL", enabled = true)
+    whenever(repository.add(item)).thenReturn(false)
+    whenever(repository.update("AAPL", true, null)).thenReturn(true)
+
+    service.ensureEnabled(symbol)
+
+    verify(repository).add(item)
+    verify(repository).update("AAPL", true, null)
+  }
+
+  @Test
   fun `should throw exception when adding blank symbol`() {
     val item = WatchListItem("", enabled = true)
 

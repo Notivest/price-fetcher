@@ -16,6 +16,7 @@ class MarketDataService(
   private val providerFactory: ProviderFactory,
   private val quotes: QuoteRepository,
   private val candles: CandleRepository,
+  private val watchList: WatchListService,
 ) {
   fun prefetch(symbols: List<SymbolId>): Int {
     val provider = providerFactory.primary()
@@ -25,10 +26,13 @@ class MarketDataService(
   }
 
   fun getQuotes(ids: List<SymbolId>): List<QuoteDto> =
-    ids.map { id ->
-      val (q, stale) = quotes.get(id)
-      q?.toDto(stale) ?: throw NoSuchElementException("No quote for $id")
-    }
+    ids
+      .also { ensureTracked(it) }
+      .also { ensureQuotesCached(it) }
+      .map { id ->
+        val (q, stale) = quotes.get(id)
+        q?.toDto(stale) ?: throw NoSuchElementException("No quote for $id")
+      }
 
   fun historical(
     symbol: SymbolId,
@@ -37,11 +41,24 @@ class MarketDataService(
     tf: Timeframe,
     adjusted: Boolean,
   ): CandleSeries {
+    ensureTracked(listOf(symbol))
+    ensureQuotesCached(listOf(symbol))
     candles.get(symbol, tf)?.let { return it }
     val cs = providerFactory.primary().fetchHistorical(symbol, from, to, tf)
     val adj = cs.copy(items = cs.items.map { it.copy(adjusted = adjusted) })
     candles.put(adj)
     return adj
+  }
+
+  private fun ensureTracked(symbols: Collection<SymbolId>) {
+    symbols.forEach(watchList::ensureEnabled)
+  }
+
+  private fun ensureQuotesCached(symbols: Collection<SymbolId>) {
+    val missing = symbols.filter { (quotes.get(it).first == null) }
+    if (missing.isNotEmpty()) {
+      prefetch(missing)
+    }
   }
 
   private fun Quote.toDto(stale: Boolean) =
