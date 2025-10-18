@@ -1,6 +1,7 @@
 package com.notivest.pricefetcher.controllers
 
 import com.notivest.pricefetcher.models.MarketClock
+import com.notivest.pricefetcher.models.MarketClockPhase
 import com.notivest.pricefetcher.repositories.interfaces.CandleRepository
 import com.notivest.pricefetcher.repositories.interfaces.QuoteRepository
 import com.notivest.pricefetcher.service.WatchListService
@@ -19,7 +20,13 @@ class HealthController(
   @GetMapping("/health")
   fun health(): ResponseEntity<Map<String, Any>> {
     val enabledSymbols = watchListService.enabledSymbols()
+    val snapshot = marketClock.snapshot(enabledSymbols)
     val allSymbols = watchListService.list()
+
+    val openSymbols =
+      snapshot.phasesBySymbol.filterValues { it != MarketClockPhase.NIGHT }.keys.map { it.toString() }
+    val closedSymbols =
+      snapshot.phasesBySymbol.filterValues { it == MarketClockPhase.NIGHT }.keys.map { it.toString() }
 
     return ResponseEntity.ok(
       mapOf(
@@ -27,8 +34,11 @@ class HealthController(
         "timestamp" to Instant.now(),
         "market" to
           mapOf(
-            "phase" to marketClock.phase(),
-            "timezone" to "America/New_York",
+            "phase" to snapshot.overallPhase.name,
+            "fetched_at" to snapshot.fetchedAt,
+            "open_symbols" to openSymbols,
+            "closed_symbols" to closedSymbols,
+            "timezones" to snapshot.timezoneBySymbol.mapKeys { it.key.toString() },
           ),
         "cache" to
           mapOf(

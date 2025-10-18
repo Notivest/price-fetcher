@@ -9,7 +9,6 @@ import org.springframework.security.core.AuthenticationException
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException
 import org.springframework.security.web.AuthenticationEntryPoint
 import org.springframework.stereotype.Component
-import java.time.Instant
 
 @Component
 class AuthenticationErrorHandler(
@@ -34,24 +33,24 @@ class AuthenticationErrorHandler(
     response.writer.flush()
   }
 
-  private fun createErrorResponse(ex: AuthenticationException): ErrorResponse {
+  private fun createErrorResponse(ex: AuthenticationException): AuthenticationErrorResponse {
     return when (ex) {
       is OAuth2AuthenticationException -> {
         when {
           ex.error.errorCode == "invalid_token" ->
-            ErrorResponse(
+            AuthenticationErrorResponse(
               error = "invalid_token",
               message = "El token JWT proporcionado es inválido",
               details = "Verifica que el token esté bien formado y no haya expirado",
             )
           ex.error.errorCode == "insufficient_scope" ->
-            ErrorResponse(
+            AuthenticationErrorResponse(
               error = "insufficient_scope",
               message = "El token no tiene los permisos necesarios",
               details = "Se requieren permisos adicionales para acceder a este recurso",
             )
           else ->
-            ErrorResponse(
+            AuthenticationErrorResponse(
               error = "authentication_failed",
               message = "Error de autenticación OAuth2",
               details = ex.error.description ?: "Token inválido o expirado",
@@ -62,19 +61,19 @@ class AuthenticationErrorHandler(
       else -> {
         when {
           ex.message?.contains("JWT") == true ->
-            ErrorResponse(
+            AuthenticationErrorResponse(
               error = "jwt_error",
               message = "Error procesando el token JWT",
               details = "Token malformado, expirado o inválido",
             )
           ex.message?.contains("Bearer") == true ->
-            ErrorResponse(
+            AuthenticationErrorResponse(
               error = "missing_token",
               message = "Token de autorización requerido",
               details = "Incluye el header 'Authorization: Bearer <token>'",
             )
           else ->
-            ErrorResponse(
+            AuthenticationErrorResponse(
               error = "unauthorized",
               message = "Acceso no autorizado",
               details = "Se requiere autenticación válida para acceder a este recurso",
@@ -83,12 +82,4 @@ class AuthenticationErrorHandler(
       }
     }
   }
-
-  data class ErrorResponse(
-    val error: String,
-    val message: String,
-    val details: String,
-    val timestamp: String = Instant.now().toString(),
-    val status: Int = 401,
-  )
 }

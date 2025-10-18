@@ -1,41 +1,46 @@
 package com.notivest.pricefetcher.service
 
-import com.notivest.pricefetcher.client.MarketDataProvider
-import com.notivest.pricefetcher.client.ProviderFactory
 import com.notivest.pricefetcher.models.MarketClock
+import com.notivest.pricefetcher.models.MarketClockPhase
+import com.notivest.pricefetcher.models.MarketClockSnapshot
 import com.notivest.pricefetcher.models.Quote
 import com.notivest.pricefetcher.models.RefreshPolicy
 import com.notivest.pricefetcher.models.SymbolId
 import com.notivest.pricefetcher.repositories.interfaces.QuoteRepository
+import com.notivest.pricefetcher.service.strategy.QuoteFetchingStrategy
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.mockito.kotlin.*
+import org.mockito.kotlin.any
+import org.mockito.kotlin.argThat
+import org.mockito.kotlin.check
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
 import java.math.BigDecimal
+import java.time.Instant
 
 class RefreshSchedulerTest {
   private lateinit var watchListService: WatchListService
-  private lateinit var providerFactory: ProviderFactory
+  private lateinit var quoteFetchingStrategy: QuoteFetchingStrategy
   private lateinit var quoteRepository: QuoteRepository
   private lateinit var marketClock: MarketClock
   private lateinit var refreshPolicy: RefreshPolicy
-  private lateinit var marketDataProvider: MarketDataProvider
   private lateinit var scheduler: RefreshScheduler
 
   @BeforeEach
   fun setUp() {
     watchListService = mock()
-    providerFactory = mock()
+    quoteFetchingStrategy = mock()
     quoteRepository = mock()
     marketClock = mock()
     refreshPolicy = mock()
-    marketDataProvider = mock()
-
-    whenever(providerFactory.primary()).thenReturn(marketDataProvider)
 
     scheduler =
       RefreshScheduler(
         watchlist = watchListService,
-        providerFactory = providerFactory,
+        quoteFetchingStrategy = quoteFetchingStrategy,
         quotes = quoteRepository,
         marketClock = marketClock,
         policy = refreshPolicy,
@@ -43,27 +48,23 @@ class RefreshSchedulerTest {
   }
 
   @Test
-  fun `should fetch quotes for enabled symbols and store them`() {
-    // Setup: Mock enabled symbols
+  fun `fetches quotes for open symbols`() {
     val symbols =
       listOf(
         SymbolId.parse("AAPL"),
         SymbolId.parse("TSLA"),
         SymbolId.parse("MSFT"),
       )
+
     whenever(watchListService.enabledSymbols()).thenReturn(symbols)
+    whenever(marketClock.snapshot(symbols)).thenReturn(snapshotFor(symbols, MarketClockPhase.REGULAR))
+    whenever(refreshPolicy.batchSize(MarketClockPhase.REGULAR)).thenReturn(60)
 
-    // Setup: Mock market phase and batch size
-    whenever(marketClock.phase()).thenReturn(MarketClock.Phase.REGULAR)
-    whenever(refreshPolicy.batchSize(MarketClock.Phase.REGULAR)).thenReturn(60)
-
-    // Setup: Mock provider response
-    val mockQuotes =
-      symbols.map { symbol ->
+    val quotes =
+      symbols.mapIndexed { idx, symbol ->
         Quote(
           symbol = symbol,
-          // Different price per symbol
-          last = BigDecimal("${100 + symbol.ticker.length}.00"),
+          last = BigDecimal(100 + idx),
           open = null,
           high = null,
           low = null,
@@ -71,34 +72,49 @@ class RefreshSchedulerTest {
           source = "TEST",
         )
       }
-    whenever(marketDataProvider.fetchQuotes(symbols)).thenReturn(mockQuotes)
-
-    // Execute
-    scheduler.tick()
-
-    // Verify: Provider was called with correct symbols
-    verify(marketDataProvider).fetchQuotes(symbols)
-
-    // Verify: All quotes were stored
-    verify(quoteRepository, times(3)).put(any<Quote>())
-    mockQuotes.forEach { quote ->
-      verify(quoteRepository).put(quote)
-    }
-  }
-
-  @Test
-  fun `should not fetch when no enabled symbols`() {
-    whenever(watchListService.enabledSymbols()).thenReturn(emptyList())
+    whenever(quoteFetchingStrategy.fetch(symbols)).thenReturn(quotes)
 
     scheduler.tick()
 
-    verify(marketDataProvider, never()).fetchQuotes(any())
-    verify(quoteRepository, never()).put(any<Quote>())
+    verify(quoteFetchingStrategy).fetch(symbols)
+    quotes.forEach { verify(quoteRepository).put(it) }
   }
 
   @Test
-  fun `should respect batch size and chunk symbols correctly`() {
-    // Setup: 5 symbols but batch size of 2
+  fun `skips closed markets`() {
+    val symbols = listOf(SymbolId.parse("AAPL"), SymbolId.parse("X:BTCUSD"))
+    whenever(watchListService.enabledSymbols()).thenReturn(symbols)
+
+    val phases =
+      mapOf(
+        symbols[0] to MarketClockPhase.NIGHT,
+        symbols[1] to MarketClockPhase.REGULAR,
+      )
+    whenever(marketClock.snapshot(symbols)).thenReturn(snapshotFor(phases, MarketClockPhase.REGULAR))
+    whenever(refreshPolicy.batchSize(MarketClockPhase.REGULAR)).thenReturn(60)
+    whenever(quoteFetchingStrategy.fetch(listOf(symbols[1]))).thenReturn(
+      listOf(
+        Quote(
+          symbol = symbols[1],
+          last = BigDecimal("50000.00"),
+          open = null,
+          high = null,
+          low = null,
+          prevClose = null,
+          source = "TEST",
+        ),
+      ),
+    )
+
+    scheduler.tick()
+
+    verify(quoteFetchingStrategy, never()).fetch(argThat { contains(symbols[0]) })
+    verify(quoteFetchingStrategy).fetch(listOf(symbols[1]))
+    verify(quoteRepository).put(check { require(it.symbol == symbols[1]) })
+  }
+
+  @Test
+  fun `chunks symbols using batch size`() {
     val symbols =
       listOf(
         SymbolId.parse("AAPL"),
@@ -108,215 +124,138 @@ class RefreshSchedulerTest {
         SymbolId.parse("AMZN"),
       )
     whenever(watchListService.enabledSymbols()).thenReturn(symbols)
+    whenever(marketClock.snapshot(symbols)).thenReturn(snapshotFor(symbols, MarketClockPhase.PRE))
+    whenever(refreshPolicy.batchSize(MarketClockPhase.PRE)).thenReturn(2)
 
-    // Setup: Small batch size during NIGHT phase
-    whenever(marketClock.phase()).thenReturn(MarketClock.Phase.NIGHT)
-    whenever(refreshPolicy.batchSize(MarketClock.Phase.NIGHT)).thenReturn(2)
+    whenever(quoteFetchingStrategy.fetch(listOf(symbols[0], symbols[1])))
+      .thenReturn(
+        listOf(
+          quote(symbols[0], "150"),
+          quote(symbols[1], "700"),
+        ),
+      )
+    whenever(quoteFetchingStrategy.fetch(listOf(symbols[2], symbols[3])))
+      .thenReturn(
+        listOf(
+          quote(symbols[2], "300"),
+          quote(symbols[3], "2500"),
+        ),
+      )
+    whenever(quoteFetchingStrategy.fetch(listOf(symbols[4])))
+      .thenReturn(listOf(quote(symbols[4], "3000")))
 
-    // Setup: Mock provider to return quotes for each chunk
-    val mockQuote1 =
-      Quote(
-        symbol = SymbolId.parse("AAPL"),
-        last = BigDecimal("150.00"),
-        open = null,
-        high = null,
-        low = null,
-        prevClose = null,
-        source = "TEST",
-      )
-    val mockQuote2 =
-      Quote(
-        symbol = SymbolId.parse("TSLA"),
-        last = BigDecimal("200.00"),
-        open = null,
-        high = null,
-        low = null,
-        prevClose = null,
-        source = "TEST",
-      )
-    val mockQuote3 =
-      Quote(
-        symbol = SymbolId.parse("MSFT"),
-        last = BigDecimal("300.00"),
-        open = null,
-        high = null,
-        low = null,
-        prevClose = null,
-        source = "TEST",
-      )
-    val mockQuote4 =
-      Quote(
-        symbol = SymbolId.parse("GOOGL"),
-        last = BigDecimal("2500.00"),
-        open = null,
-        high = null,
-        low = null,
-        prevClose = null,
-        source = "TEST",
-      )
-    val mockQuote5 =
-      Quote(
-        symbol = SymbolId.parse("AMZN"),
-        last = BigDecimal("3000.00"),
-        open = null,
-        high = null,
-        low = null,
-        prevClose = null,
-        source = "TEST",
-      )
-
-    whenever(marketDataProvider.fetchQuotes(listOf(symbols[0], symbols[1])))
-      .thenReturn(listOf(mockQuote1, mockQuote2))
-    whenever(marketDataProvider.fetchQuotes(listOf(symbols[2], symbols[3])))
-      .thenReturn(listOf(mockQuote3, mockQuote4))
-    whenever(marketDataProvider.fetchQuotes(listOf(symbols[4])))
-      .thenReturn(listOf(mockQuote5))
-
-    // Execute
     scheduler.tick()
 
-    // Verify: Provider was called 3 times (chunks of 2, 2, 1)
-    verify(marketDataProvider, times(3)).fetchQuotes(any())
-    verify(marketDataProvider).fetchQuotes(listOf(symbols[0], symbols[1]))
-    verify(marketDataProvider).fetchQuotes(listOf(symbols[2], symbols[3]))
-    verify(marketDataProvider).fetchQuotes(listOf(symbols[4]))
-
-    // Verify: All quotes were stored
-    verify(quoteRepository, times(5)).put(any<Quote>())
+    verify(quoteFetchingStrategy).fetch(listOf(symbols[0], symbols[1]))
+    verify(quoteFetchingStrategy).fetch(listOf(symbols[2], symbols[3]))
+    verify(quoteFetchingStrategy).fetch(listOf(symbols[4]))
+    verify(quoteRepository, times(5)).put(any())
   }
 
   @Test
-  fun `should use different batch sizes for different market phases`() {
+  fun `uses batch size according to snapshot phase`() {
     val symbols = listOf(SymbolId.parse("AAPL"))
     whenever(watchListService.enabledSymbols()).thenReturn(symbols)
+    whenever(quoteFetchingStrategy.fetch(any())).thenReturn(listOf(quote(symbols[0], "150")))
 
-    val mockQuote =
-      Quote(
-        symbol = symbols[0],
-        last = BigDecimal("150.00"),
-        open = null,
-        high = null,
-        low = null,
-        prevClose = null,
-        source = "TEST",
-      )
-    whenever(marketDataProvider.fetchQuotes(any())).thenReturn(listOf(mockQuote))
+    whenever(
+      marketClock.snapshot(symbols),
+    ).thenReturn(snapshotFor(symbols, MarketClockPhase.REGULAR))
+      .thenReturn(snapshotFor(symbols, MarketClockPhase.PRE))
+      .thenReturn(snapshotFor(symbols, MarketClockPhase.AFTER))
+      .thenReturn(snapshotFor(symbols, MarketClockPhase.NIGHT))
 
-    // Test REGULAR phase
-    whenever(marketClock.phase()).thenReturn(MarketClock.Phase.REGULAR)
-    whenever(refreshPolicy.batchSize(MarketClock.Phase.REGULAR)).thenReturn(60)
-    scheduler.tick()
-    verify(refreshPolicy).batchSize(MarketClock.Phase.REGULAR)
+    whenever(refreshPolicy.batchSize(MarketClockPhase.REGULAR)).thenReturn(60)
+    whenever(refreshPolicy.batchSize(MarketClockPhase.PRE)).thenReturn(40)
+    whenever(refreshPolicy.batchSize(MarketClockPhase.AFTER)).thenReturn(40)
+    whenever(refreshPolicy.batchSize(MarketClockPhase.NIGHT)).thenReturn(10)
 
-    // Test PREMARKET phase
-    whenever(marketClock.phase()).thenReturn(MarketClock.Phase.PRE)
-    whenever(refreshPolicy.batchSize(MarketClock.Phase.PRE)).thenReturn(40)
-    scheduler.tick()
-    verify(refreshPolicy).batchSize(MarketClock.Phase.PRE)
+    repeat(4) { scheduler.tick() }
 
-    // Test AFTER phase
-    whenever(marketClock.phase()).thenReturn(MarketClock.Phase.AFTER)
-    whenever(refreshPolicy.batchSize(MarketClock.Phase.AFTER)).thenReturn(40)
-    scheduler.tick()
-    verify(refreshPolicy).batchSize(MarketClock.Phase.AFTER)
-
-    // Test NIGHT phase
-    whenever(marketClock.phase()).thenReturn(MarketClock.Phase.NIGHT)
-    whenever(refreshPolicy.batchSize(MarketClock.Phase.NIGHT)).thenReturn(10)
-    scheduler.tick()
-    verify(refreshPolicy).batchSize(MarketClock.Phase.NIGHT)
+    verify(refreshPolicy).batchSize(MarketClockPhase.REGULAR)
+    verify(refreshPolicy).batchSize(MarketClockPhase.PRE)
+    verify(refreshPolicy).batchSize(MarketClockPhase.AFTER)
+    verify(refreshPolicy, never()).batchSize(MarketClockPhase.NIGHT)
   }
 
   @Test
-  fun `should handle provider errors gracefully`() {
+  fun `handles provider errors gracefully`() {
     val symbols = listOf(SymbolId.parse("AAPL"))
     whenever(watchListService.enabledSymbols()).thenReturn(symbols)
-    whenever(marketClock.phase()).thenReturn(MarketClock.Phase.REGULAR)
-    whenever(refreshPolicy.batchSize(any())).thenReturn(60)
+    whenever(marketClock.snapshot(symbols)).thenReturn(snapshotFor(symbols, MarketClockPhase.REGULAR))
+    whenever(refreshPolicy.batchSize(MarketClockPhase.REGULAR)).thenReturn(60)
 
-    // Mock provider to throw exception
-    whenever(marketDataProvider.fetchQuotes(any())).thenThrow(RuntimeException("Network error"))
+    whenever(quoteFetchingStrategy.fetch(symbols)).thenThrow(RuntimeException("Boom"))
 
-    // Should not crash
     scheduler.tick()
 
-    verify(marketDataProvider).fetchQuotes(symbols)
-    // Repository should not be called if provider fails
-    verify(quoteRepository, never()).put(any<Quote>())
+    verify(quoteFetchingStrategy).fetch(symbols)
+    verify(quoteRepository, never()).put(any())
   }
 
   @Test
-  fun `should handle empty provider response`() {
+  fun `handles empty provider response`() {
     val symbols = listOf(SymbolId.parse("AAPL"))
     whenever(watchListService.enabledSymbols()).thenReturn(symbols)
-    whenever(marketClock.phase()).thenReturn(MarketClock.Phase.REGULAR)
-    whenever(refreshPolicy.batchSize(any())).thenReturn(60)
+    whenever(marketClock.snapshot(symbols)).thenReturn(snapshotFor(symbols, MarketClockPhase.REGULAR))
+    whenever(refreshPolicy.batchSize(MarketClockPhase.REGULAR)).thenReturn(60)
 
-    // Mock provider to return empty list
-    whenever(marketDataProvider.fetchQuotes(any())).thenReturn(emptyList())
+    whenever(quoteFetchingStrategy.fetch(symbols)).thenReturn(emptyList())
 
     scheduler.tick()
 
-    verify(marketDataProvider).fetchQuotes(symbols)
-    verify(quoteRepository, never()).put(any<Quote>())
+    verify(quoteFetchingStrategy).fetch(symbols)
+    verify(quoteRepository, never()).put(any())
   }
 
   @Test
-  fun `should fetch multiple batches when symbols exceed batch size`() {
-    // Create 150 symbols
+  fun `processes more symbols than batch size`() {
     val symbols = (1..150).map { SymbolId.parse("SYM$it") }
     whenever(watchListService.enabledSymbols()).thenReturn(symbols)
+    whenever(marketClock.snapshot(symbols)).thenReturn(snapshotFor(symbols, MarketClockPhase.REGULAR))
+    whenever(refreshPolicy.batchSize(MarketClockPhase.REGULAR)).thenReturn(60)
 
-    whenever(marketClock.phase()).thenReturn(MarketClock.Phase.REGULAR)
-    whenever(refreshPolicy.batchSize(MarketClock.Phase.REGULAR)).thenReturn(60)
-
-    // Mock provider to return quotes for any chunk
-    whenever(marketDataProvider.fetchQuotes(any())).thenAnswer { invocation ->
-      val requestedSymbols = invocation.getArgument<List<SymbolId>>(0)
-      requestedSymbols.map { symbol ->
-        Quote(
-          symbol = symbol,
-          last = BigDecimal("100.00"),
-          open = null,
-          high = null,
-          low = null,
-          prevClose = null,
-          source = "TEST",
-        )
-      }
+    whenever(quoteFetchingStrategy.fetch(any())).thenAnswer { invocation ->
+      val requested = invocation.getArgument<List<SymbolId>>(0)
+      requested.map { quote(it, "100") }
     }
 
     scheduler.tick()
 
-    // Should make 3 calls: 60 + 60 + 30
-    verify(marketDataProvider, times(3)).fetchQuotes(any())
-
-    // Should store all 150 quotes
-    verify(quoteRepository, times(150)).put(any<Quote>())
+    verify(quoteFetchingStrategy, times(3)).fetch(any())
+    verify(quoteRepository, times(150)).put(any())
   }
 
-  @Test
-  fun `should use primary provider from factory`() {
-    val symbols = listOf(SymbolId.parse("AAPL"))
-    whenever(watchListService.enabledSymbols()).thenReturn(symbols)
-    whenever(marketClock.phase()).thenReturn(MarketClock.Phase.REGULAR)
-    whenever(refreshPolicy.batchSize(any())).thenReturn(60)
+  private fun snapshotFor(
+    symbols: List<SymbolId>,
+    overall: MarketClockPhase,
+  ): MarketClockSnapshot = snapshotFor(symbols.associateWith { overall }, overall)
 
-    val mockQuote =
-      Quote(
-        symbol = symbols[0],
-        last = BigDecimal("150.00"),
-        open = null,
-        high = null,
-        low = null,
-        prevClose = null,
-        source = "TEST",
-      )
-    whenever(marketDataProvider.fetchQuotes(any())).thenReturn(listOf(mockQuote))
-
-    scheduler.tick()
-
-    verify(providerFactory).primary()
-    verify(marketDataProvider).fetchQuotes(symbols)
+  private fun snapshotFor(
+    phases: Map<SymbolId, MarketClockPhase>,
+    overall: MarketClockPhase,
+  ): MarketClockSnapshot {
+    val now = Instant.now()
+    val tz = phases.keys.associateWith { "America/New_York" }
+    return MarketClockSnapshot(
+      fetchedAt = now,
+      overallPhase = overall,
+      phasesBySymbol = phases,
+      timezoneBySymbol = tz,
+    )
   }
+
+  private fun quote(
+    symbolId: SymbolId,
+    price: String,
+  ): Quote =
+    Quote(
+      symbol = symbolId,
+      last = BigDecimal(price),
+      open = null,
+      high = null,
+      low = null,
+      prevClose = null,
+      source = "TEST",
+    )
 }

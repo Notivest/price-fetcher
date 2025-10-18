@@ -23,7 +23,6 @@ class WatchListService(private val repo: WatchListRepository) {
     }
   }
 
-
   fun patch(
     symbol: String,
     enabled: Boolean?,
