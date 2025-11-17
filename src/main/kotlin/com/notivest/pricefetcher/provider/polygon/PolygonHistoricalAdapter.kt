@@ -32,10 +32,14 @@ class PolygonHistoricalAdapter(
   ): CandleSeries {
     val base = props.polygon.baseUrl.removeSuffix("/")
     val token = props.polygon.apiKey
-    require(base.isNotBlank() && token.isNotBlank()) { "Polygon base-url/api-key not configured" }
 
-    logger.debug(
-      "Fetching historical data for {} from {} to {} with timeframe {}",
+    if (base.isBlank() || token.isBlank()) {
+      logger.error("Polygon configuration missing: base-url is blank={}, api-key is blank={}", base.isBlank(), token.isBlank())
+      throw IllegalArgumentException("Polygon base-url/api-key not configured")
+    }
+
+    logger.info(
+      "Starting Polygon historical data fetch: symbol={}, from={}, to={}, timeframe={}",
       symbol,
       from,
       to,
@@ -57,32 +61,38 @@ class PolygonHistoricalAdapter(
     val uri =
       "$base/v2/aggs/ticker/$rawSymbol/range/$timeframeValue/$fromStr/$toStr?adjusted=true&limit=50000&apiKey=$token"
 
+    logger.debug("Polygon API request URI (without key): {}/v2/aggs/ticker/{}/range/{}/{}/{}", base, rawSymbol, timeframeValue, fromStr, toStr)
+
     return try {
+      logger.debug("Executing HTTP GET request to Polygon API for symbol: {}", rawSymbol)
+
       val payload =
         webClient.get().uri(uri)
           .retrieve()
           .onStatus({ it == HttpStatus.TOO_MANY_REQUESTS }) { response ->
-            response.bodyToMono<String>().flatMap {
-              logger.warn("Polygon rate limited for symbol: {}", rawSymbol)
+            response.bodyToMono<String>().flatMap { body ->
+              logger.warn("Polygon rate limited (429) for symbol: {} - Body: {}", rawSymbol, body)
               Mono.error(RuntimeException("Polygon rate-limited for $rawSymbol"))
             }
           }
           .onStatus({ it.is4xxClientError }) { response ->
-            response.bodyToMono<String>().flatMap {
-              logger.warn("Client error for symbol {}: {}", rawSymbol, it)
-              Mono.error(RuntimeException("Client error for $rawSymbol: $it"))
+            response.bodyToMono<String>().flatMap { body ->
+              logger.error("Polygon client error for symbol {}: {}", rawSymbol, body)
+              Mono.error(RuntimeException("Client error for $rawSymbol: $body"))
             }
           }
           .onStatus({ it.is5xxServerError }) { response ->
-            response.bodyToMono<String>().flatMap {
-              logger.warn("Server error for symbol {}: {}", rawSymbol, it)
-              Mono.error(RuntimeException("Server error for $rawSymbol: $it"))
+            response.bodyToMono<String>().flatMap { body ->
+              logger.error("Polygon server error for symbol {}: {}", rawSymbol, body)
+              Mono.error(RuntimeException("Server error for $rawSymbol: $body"))
             }
           }
           .bodyToMono<PolygonAggPayload>()
           .timeout(Duration.ofSeconds(30))
           .block()
           ?: PolygonAggPayload()
+
+      logger.info("Polygon API response received for symbol: {}, results count: {}", rawSymbol, payload.results.size)
 
       val items =
         payload.results.sortedBy { it.t }.map { result ->
@@ -97,10 +107,10 @@ class PolygonHistoricalAdapter(
           )
         }
 
-      logger.debug("Successfully fetched {} candles for {}", items.size, symbol)
+      logger.info("Successfully fetched and transformed {} candles for symbol: {} (timeframe: {})", items.size, symbol, timeframe)
       CandleSeries(symbol = symbol, timeframe = timeframe, items = items)
     } catch (ex: Exception) {
-      logger.error("Failed to fetch historical data for symbol {}: {}", symbol, ex.message)
+      logger.error("Failed to fetch historical data for symbol {}: {} - Error type: {}", symbol, ex.message, ex::class.simpleName, ex)
       throw ex
     }
   }
