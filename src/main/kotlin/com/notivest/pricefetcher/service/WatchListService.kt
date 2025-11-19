@@ -15,6 +15,14 @@ class WatchListService(private val repo: WatchListRepository) {
     require(ok) { "symbol already exists" }
   }
 
+  fun ensureEnabled(symbol: SymbolId) {
+    val normalized = symbol.toString()
+    val added = repo.add(WatchListItem(symbol = normalized, enabled = true))
+    if (!added) {
+      repo.update(normalized, enabled = true, priority = null)
+    }
+  }
+
   fun patch(
     symbol: String,
     enabled: Boolean?,

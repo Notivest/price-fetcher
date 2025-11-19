@@ -4,12 +4,12 @@ import org.springframework.stereotype.Component
 
 @Component
 class RefreshPolicy {
-  fun batchSize(phase: MarketClock.Phase): Int =
+  fun batchSize(phase: MarketClockPhase): Int =
     when (phase) {
-      MarketClock.Phase.REGULAR -> 60
-      MarketClock.Phase.PRE,
-      MarketClock.Phase.AFTER,
+      MarketClockPhase.REGULAR -> 60
+      MarketClockPhase.PRE,
+      MarketClockPhase.AFTER,
       -> 40
-      MarketClock.Phase.NIGHT -> 10
+      MarketClockPhase.NIGHT -> 10
     }
 }

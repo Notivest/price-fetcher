@@ -7,16 +7,8 @@ import org.springframework.context.annotation.Configuration
 @ConfigurationProperties(prefix = "pricefetcher.providers")
 class ProviderProperties {
   var primary: String = "FINNHUB"
-  val finnhub = Finnhub()
-  val polygon = Polygon()
-
-  class Finnhub {
-    var baseUrl: String = ""
-    var apiKey: String = ""
-  }
-
-  class Polygon {
-    var baseUrl: String = ""
-    var apiKey: String = ""
-  }
+  var quotesPrimary: String? = null
+  var historicalPrimary: String? = "POLYGON"
+  var finnhub: FinnhubProviderSettings = FinnhubProviderSettings()
+  var polygon: PolygonProviderSettings = PolygonProviderSettings()
 }

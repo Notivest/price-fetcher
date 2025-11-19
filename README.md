@@ -1,714 +1,447 @@
-# PriceFetcher - Market Data Microservice
+# 📈 Price Fetcher Service
 
-PriceFetcher es un microservicio Spring Boot (Kotlin) que proporciona cotizaciones en tiempo real y datos históricos de mercado. Mantiene un cache en memoria y administra una watchlist de símbolos para monitoreo automático.
+Un microservicio robusto y escalable para obtener cotizaciones de acciones en tiempo real y datos históricos, construido con **Spring Boot** y **Kotlin**.
 
-## 🚀 Características
+## 🚀 Características Principales
 
-- **Cotizaciones en tiempo real**: Cache en memoria con TTL configurable
-- **Datos históricos**: Almacenamiento en cache con múltiples timeframes  
-- **Watchlist**: CRUD completo para gestión de símbolos a monitorear
-- **Scheduler automático**: Actualización periódica de cotizaciones
-- **Múltiples proveedores**: Soporte para Finnhub (quotes) y Polygon (históricos)
-- **Health checks**: Endpoint de salud con información de cache y mercado
+- **🔄 Cotizaciones en Tiempo Real**: Integración con Finnhub y Polygon APIs
+- **📊 Datos Históricos**: Velas (candles) con diferentes timeframes
+- **🔒 Seguridad Dual**: Soporte para usuarios (vía Gateway) y servicios M2M
+- **📝 Watchlist**: Gestión de símbolos favoritos con prioridades
+- **⚡ Caché Inteligente**: Sistema de caché en memoria con TTL configurable
+- **📋 Auditoría**: Sistema completo de logging para compliance
+- **🏥 Health Checks**: Monitoreo y métricas integradas
+- **🔧 Configuración Flexible**: Perfiles para desarrollo, testing y producción
 
-## 📋 Requisitos
+## 🏗️ Arquitectura
 
-- **Java 21+**
-- **API Keys** (opcionales para testing):
-  - Finnhub API Key: [https://finnhub.io](https://finnhub.io)
-  - Polygon API Key: [https://polygon.io](https://polygon.io)
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   API Gateway   │────│  Price Fetcher   │────│  External APIs  │
+│  (Users/Auth)   │    │    Service       │    │ (Finnhub/Polygon)│
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                                │
+                       ┌────────┴────────┐
+                       │   In-Memory     │
+                       │     Cache       │
+                       └─────────────────┘
+```
 
-## 🛠️ Instalación y Ejecución
+### 📦 Componentes Principales
 
-### Opción 1: Con Gradle (Desarrollo)
+- **Controllers**: Endpoints REST con validación de seguridad
+- **Services**: Lógica de negocio y orchestración
+- **Clients**: Integración con APIs externas (Finnhub/Polygon)
+- **Repositories**: Gestión de caché en memoria
+- **Security**: Autenticación dual (usuarios + servicios M2M)
+- **Models**: DTOs y entidades de dominio
+
+## 🛠️ Stack Tecnológico
+
+- **Lenguaje**: Kotlin 1.9.25
+- **Framework**: Spring Boot 3.4.6
+- **JVM**: Java 21
+- **Seguridad**: Spring Security + OAuth2 JWT
+- **HTTP Client**: WebFlux WebClient
+- **Testing**: JUnit 5 + Mockito
+- **Build**: Gradle
+- **Linting**: KtLint
+
+## 🚀 Inicio Rápido
+
+### Prerrequisitos
+
+- **Java 21** o superior
+- **API Keys**:
+  - Finnhub API Key ([obtener aquí](https://finnhub.io/))
+  - Polygon API Key ([obtener aquí](https://polygon.io/)) - opcional
+
+### 1. Clonar el Repositorio
 
 ```bash
-# Clonar repositorio
-git clone <repo-url>
+git clone <repository-url>
 cd price-fetcher
+```
 
-# Configurar variables de entorno (opcional)
-export FINNHUB_API_KEY=tu_finnhub_key
-export POLYGON_API_KEY=tu_polygon_key
+### 2. Configurar Variables de Entorno
 
-# Ejecutar aplicación
-./gradlew bootRun
+```bash
+# APIs de cotizaciones
+export FINNHUB_API_KEY=your_finnhub_api_key
+export POLYGON_API_KEY=your_polygon_api_key  # opcional
+
+# Configuración de Auth0 (solo para producción)
+export AUTH0_DOMAIN=your-domain.auth0.com
+```
+
+### 3. Ejecutar en Modo Desarrollo
+
+```bash
+# Modo desarrollo (sin autenticación)
+./gradlew bootRun --args='--spring.profiles.active=dev'
+```
+
+### 4. Verificar que Funciona
+
+```bash
+# Health check
+curl http://localhost:8080/health
+
+# Obtener cotizaciones (modo dev)
+curl "http://localhost:8080/quotes?symbols=AAPL,TSLA,MSFT"
+```
+
+## 📋 API Endpoints
+
+### 🏥 Health & Monitoring
+
+| Endpoint | Método | Descripción |
+|----------|---------|-------------|
+| `/health` | GET | Estado del servicio y métricas |
+| `/actuator/health` | GET | Spring Boot health checks |
+
+### 📊 Cotizaciones
+
+| Endpoint | Método | Descripción | Scopes Requeridos |
+|----------|---------|-------------|-------------------|
+| `/quotes` | GET | Cotizaciones actuales | `read:prices` |
+| `/historical` | GET | Datos históricos | `read:market-data` |
+| `/prefetch` | POST | Forzar actualización | `write:prices` |
+
+### 📝 Watchlist
+
+| Endpoint | Método | Descripción | Scopes Requeridos |
+|----------|---------|-------------|-------------------|
+| `/watchlist` | GET | Listar símbolos | `read:prices` |
+| `/watchlist` | POST | Agregar símbolo | `write:prices` |
+| `/watchlist/{symbol}` | PATCH | Actualizar símbolo | `write:prices` |
+| `/watchlist/{symbol}` | DELETE | Eliminar símbolo | `write:prices` |
+
+### 📖 Ejemplos de Uso
+
+#### Obtener Cotizaciones
+
+```bash
+# Múltiples símbolos
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:8080/quotes?symbols=AAPL,TSLA,MSFT"
+
+# Respuesta
+{
+  "quotes": [
+    {
+      "symbol": "AAPL",
+      "last": 150.25,
+      "open": 149.80,
+      "high": 151.00,
+      "low": 149.50,
+      "prevClose": 149.90,
+      "currency": "USD",
+      "source": "FINNHUB",
+      "ts": "2024-01-15T15:30:00Z",
+      "stale": false
+    }
+  ]
+}
+```
+
+#### Datos Históricos
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:8080/historical?symbol=AAPL&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z&tf=T1D"
+```
+
+#### Gestionar Watchlist
+
+```bash
+# Agregar símbolo
+curl -X POST -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"symbol":"AAPL","enabled":true,"priority":1}' \
+  http://localhost:8080/watchlist
+
+# Actualizar símbolo
+curl -X PATCH -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"enabled":false}' \
+  http://localhost:8080/watchlist/AAPL
+```
+
+## 🔒 Autenticación y Autorización
+
+El servicio soporta **dos tipos de autenticación**:
+
+### 1. 👥 Usuarios (vía API Gateway)
+
+Para usuarios finales que acceden a través del API Gateway:
+
+```bash
+curl -H "X-User-ID: user123" \
+     -H "X-User-Scopes: read:prices,user:profile" \
+     -H "X-Session-ID: session456" \
+     "http://localhost:8080/quotes?symbols=AAPL"
+```
+
+### 2. 🤖 Servicios (M2M)
+
+Para comunicación service-to-service con JWT:
+
+```bash
+curl -H "Authorization: Bearer <jwt-token>" \
+     -H "X-Service-Name: portfolio-service" \
+     "http://localhost:8080/quotes?symbols=AAPL"
+```
+
+### 🔑 Scopes Disponibles
+
+| Scope | Descripción |
+|-------|-------------|
+| `read:prices` | Leer cotizaciones y watchlist |
+| `write:prices` | Modificar watchlist y prefetch |
+| `read:market-data` | Acceso a datos históricos |
+| `service:internal` | Operaciones internas entre servicios |
+
+## ⚙️ Configuración
+
+### 🔧 Variables de Entorno
+
+| Variable | Descripción | Requerida | Default |
+|----------|-------------|-----------|---------|
+| `FINNHUB_API_KEY` | API Key de Finnhub | ✅ | - |
+| `POLYGON_API_KEY` | API Key de Polygon | ❌ | - |
+| `AUTH0_DOMAIN` | Dominio de Auth0 | ✅ (prod) | your-domain.auth0.com |
+
+### 📁 Perfiles de Configuración
+
+#### Desarrollo (`dev`)
+```bash
+./gradlew bootRun --args='--spring.profiles.active=dev'
+```
+- ❌ Sin autenticación
+- 📝 Logs verbosos
+- 🚫 Sin auditoría
+
+#### Testing (`test`)
+```bash
+./gradlew test
+```
+- 🧪 Configuración para tests
+- 🎭 Mocks de APIs externas
+
+#### Producción (`prod`)
+```bash
+java -jar price-fetcher.jar --spring.profiles.active=prod
+```
+- ✅ Autenticación completa
+- 📋 Auditoría habilitada
+- 🔒 Validación JWT
+
+### 🎛️ Configuraciones Principales
+
+```properties
+# Proveedor de datos (FINNHUB o POLYGON)
+pricefetcher.providers.primary=FINNHUB
+
+# Configuración de mercado
+pricefetcher.market.timezone=America/New_York
+pricefetcher.market.schedule.regular=09:30-16:00
+
+# Configuración de cotizaciones
+pricefetcher.quotes.refresh-ms=2000
+pricefetcher.quotes.ttl-seconds=45
+
+# Seguridad
+pricefetcher.security.enabled=true
+pricefetcher.security.audit.enabled=true
+```
+
+## 🏃‍♂️ Desarrollo
+
+### 🔧 Setup de Desarrollo
+
+```bash
+# Instalar dependencias
+./gradlew build
 
 # Ejecutar tests
 ./gradlew test
 
-# Verificar formato de código
+# Linting
 ./gradlew ktlintCheck
+
+# Formatear código
+./gradlew ktlintFormat
+
+# Ejecutar en modo desarrollo
+./gradlew bootRun --args='--spring.profiles.active=dev'
 ```
 
-### Opción 2: Con Docker
-
-```bash
-# Construir imagen
-docker build -t price-fetcher .
-
-# Ejecutar con variables de entorno
-docker run -p 8080:8080 \
-  -e FINNHUB_API_KEY=tu_key \
-  -e POLYGON_API_KEY=tu_key \
-  price-fetcher
-```
-
-### Opción 3: Docker Compose
-
-```yaml
-# docker-compose.yml
-version: '3.8'
-services:
-  price-fetcher:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
-      - POLYGON_API_KEY=${POLYGON_API_KEY}
-```
-
-```bash
-docker-compose up
-```
-
-## 📡 API Endpoints Completos
-
-### 🏥 Health & Monitoring
-
-#### `GET /health`
-**Descripción**: Endpoint de salud que proporciona información completa del estado de la aplicación, incluyendo tamaños de cache, estado del mercado y estadísticas de la watchlist.
-
-**Parámetros**: Ninguno
-
-**Respuesta**:
-```json
-{
-  "status": "UP",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "market": {
-    "phase": "REGULAR",
-    "timezone": "America/New_York"
-  },
-  "cache": {
-    "quotes": 150,
-    "candles": 12,
-    "symbols": ["AAPL", "TSLA", "MSFT"]
-  },
-  "watchlist": {
-    "total": 25,
-    "enabled": 20,
-    "disabled": 5,
-    "enabled_symbols": ["AAPL", "TSLA"]
-  },
-  "version": {
-    "app": "price-fetcher",
-    "version": "0.0.1-SNAPSHOT"
-  }
-}
-```
-
-**Casos de uso**:
-- Monitoreo de salud del servicio
-- Verificar tamaños de cache
-- Conocer fase actual del mercado
-- Debugging y observabilidad
-
----
-
-### 💰 Cotizaciones en Tiempo Real
-
-#### `GET /quotes?symbols=AAPL,TSLA,MSFT.MX`
-**Descripción**: Obtiene las cotizaciones actuales para una lista de símbolos. Los datos provienen del cache en memoria y son actualizados automáticamente por el scheduler. No realiza fetch bajo demanda.
-
-**Parámetros**:
-- `symbols` *(requerido)*: Lista de símbolos separados por coma. Soporta formato `TICKER` o `TICKER.EXCHANGE`. Máximo 50 símbolos.
-
-**Ejemplos de símbolos válidos**:
-- `AAPL` - Apple (NASDAQ)
-- `TSLA` - Tesla
-- `MSFT.MX` - Microsoft en mercado mexicano
-
-**Respuesta exitosa** (200):
-```json
-[
-  {
-    "symbol": "AAPL",
-    "last": 172.35,
-    "open": 171.00,
-    "high": 173.00,
-    "low": 170.50,
-    "prevClose": 170.90,
-    "currency": "USD",
-    "source": "FINNHUB",
-    "ts": "2024-01-15T15:30:00Z",
-    "stale": false
-  },
-  {
-    "symbol": "TSLA",
-    "last": 248.50,
-    "open": 245.00,
-    "high": 250.00,
-    "low": 244.75,
-    "prevClose": 246.80,
-    "currency": "USD",
-    "source": "FINNHUB", 
-    "ts": "2024-01-15T15:30:00Z",
-    "stale": true
-  }
-]
-```
-
-**Errores**:
-- `400`: Parámetro symbols vacío, mal formado, o demasiados símbolos (>50)
-- `404`: Uno o más símbolos no encontrados en cache
-
-**Campo `stale`**: 
-- `false`: Dato fresco (< 45 segundos)
-- `true`: Dato obsoleto (> 45 segundos), será actualizado por el scheduler
-
-**Casos de uso**:
-- Obtener precios actuales para mostrar en UI
-- Validar precios antes de ejecutar operaciones
-- Monitorear múltiples símbolos simultáneamente
-
----
-
-### 📊 Datos Históricos
-
-#### `GET /historical?symbol=AAPL&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z&tf=T1D&adjusted=true`
-**Descripción**: Obtiene datos históricos de candles (OHLCV) para un símbolo específico. Los datos se cachean permanentemente - la primera llamada consulta el proveedor (Polygon), las siguientes devuelven desde cache.
-
-**Parámetros**:
-- `symbol` *(requerido)*: Símbolo individual (ej: AAPL, MSFT.MX)
-- `from` *(requerido)*: Fecha inicio en formato ISO-8601 (ej: 2024-01-01T00:00:00Z)
-- `to` *(requerido)*: Fecha fin en formato ISO-8601
-- `tf` *(opcional)*: Timeframe - valores: `T1M`, `T5M`, `T15M`, `T1H`, `T1D` (default: T1D)
-- `adjusted` *(opcional)*: Precios ajustados por splits/dividendos - true/false (default: true)
-
-**Respuesta exitosa** (200):
-```json
-{
-  "symbol": {
-    "ticker": "AAPL",
-    "exchange": null
-  },
-  "timeframe": "T1D",
-  "items": [
-    {
-      "ts": "2024-01-01T09:30:00Z",
-      "o": 170.00,
-      "h": 172.00,
-      "l": 169.50,
-      "c": 171.10,
-      "v": 1000000,
-      "adjusted": true
-    },
-    {
-      "ts": "2024-01-02T09:30:00Z", 
-      "o": 171.10,
-      "h": 173.50,
-      "l": 170.80,
-      "c": 172.85,
-      "v": 1200000,
-      "adjusted": true
-    }
-  ]
-}
-```
-
-**Explicación de campos**:
-- `ts`: Timestamp del candle
-- `o`: Precio de apertura (Open)
-- `h`: Precio máximo (High)
-- `l`: Precio mínimo (Low)
-- `c`: Precio de cierre (Close)
-- `v`: Volumen negociado
-- `adjusted`: Si el precio está ajustado
-
-**Errores**:
-- `400`: Parámetros faltantes, fechas mal formadas, timeframe inválido, o fecha from > to
-- `500`: Error del proveedor externo
-
-**Casos de uso**:
-- Generar gráficos de precios históricos
-- Análisis técnico y backtesting
-- Reportes de rendimiento histórico
-
----
-
-### 🔄 Prefetch Manual
-
-#### `POST /prefetch`
-**Descripción**: Fuerza la obtención inmediata de cotizaciones para todos los símbolos habilitados en la watchlist. Útil para refrescar el cache manualmente o inicializar datos al arrancar.
-
-**Parámetros**: Ninguno
-
-**Body**: No requerido
-
-**Respuesta exitosa** (200):
-```json
-{
-  "prefetched": 15,
-  "symbols": ["AAPL", "TSLA", "MSFT", "GOOGL", "AMZN"]
-}
-```
-
-**Respuesta sin símbolos** (200):
-```json
-{
-  "prefetched": 0,
-  "symbols": [],
-  "message": "No enabled symbols in watchlist"
-}
-```
-
-**Errores**:
-- `500`: Error al conectar con proveedores externos
-
-**Comportamiento**:
-- Solo procesa símbolos con `enabled: true` en la watchlist
-- Actualiza el cache de quotes inmediatamente
-- Marca los datos como fresh (stale: false)
-- Tolerante a fallos: si algún símbolo falla, continúa con los demás
-
-**Casos de uso**:
-- Inicialización manual del cache
-- Refresh forzado después de cambios en watchlist
-- Testing y debugging
-
----
-
-### 👁️ Watchlist Management
-
-#### `GET /watchlist`
-**Descripción**: Obtiene la lista completa de símbolos en la watchlist con su configuración. Los símbolos se ordenan por prioridad (menor número = mayor prioridad) y luego alfabéticamente.
-
-**Parámetros**: Ninguno
-
-**Respuesta** (200):
-```json
-[
-  {
-    "symbol": "AAPL",
-    "enabled": true,
-    "priority": 1
-  },
-  {
-    "symbol": "TSLA",
-    "enabled": true,
-    "priority": 2
-  },
-  {
-    "symbol": "MSFT",
-    "enabled": false,
-    "priority": null
-  }
-]
-```
-
-**Campos**:
-- `symbol`: Identificador del símbolo (normalizado a mayúsculas)
-- `enabled`: Si está habilitado para el scheduler automático
-- `priority`: Prioridad para procesamiento (null = sin prioridad específica)
-
-**Casos de uso**:
-- Mostrar configuración actual de la watchlist
-- Administración de símbolos monitoreados
-- Debugging del scheduler
-
----
-
-#### `POST /watchlist`
-**Descripción**: Agrega un nuevo símbolo a la watchlist. El símbolo se normaliza automáticamente (trim + uppercase) y no puede estar duplicado.
-
-**Body** (application/json):
-```json
-{
-  "symbol": "AAPL",
-  "enabled": true,
-  "priority": 1
-}
-```
-
-**Campos**:
-- `symbol` *(requerido)*: Identificador del símbolo
-- `enabled` *(opcional)*: Si debe ser procesado por el scheduler (default: true)
-- `priority` *(opcional)*: Prioridad de procesamiento (default: null)
-
-**Respuesta exitosa** (200):
-```json
-{}
-```
-
-**Errores**:
-- `400`: Symbol vacío, mal formado, o ya existe
-
-**Ejemplos de errores**:
-```json
-{
-  "error": "symbol is required"
-}
-```
-```json
-{
-  "error": "symbol already exists" 
-}
-```
-
-**Casos de uso**:
-- Agregar nuevos símbolos para monitoreo
-- Configurar prioridades de procesamiento
-- Inicialización de watchlist
-
----
-
-#### `PATCH /watchlist/{symbol}`
-**Descripción**: Actualiza la configuración de un símbolo existente en la watchlist. Permite modificar solo los campos especificados sin afectar los demás.
-
-**Parámetros de URL**:
-- `{symbol}`: Símbolo a actualizar (case-insensitive)
-
-**Body** (application/json):
-```json
-{
-  "enabled": false,
-  "priority": 5
-}
-```
-
-**Campos** (todos opcionales):
-- `enabled`: Habilitar/deshabilitar para scheduler
-- `priority`: Nueva prioridad (null para remover)
-
-**Respuesta exitosa** (204): Sin contenido
-
-**Errores**:
-- `400`: Símbolo no encontrado
-
-**Ejemplo de error**:
-```json
-{
-  "error": "symbol not found"
-}
-```
-
-**Comportamiento**:
-- `enabled: false` → El símbolo se excluye del scheduler y prefetch
-- `priority: null` → Remueve la prioridad específica
-- Los campos no especificados mantienen su valor actual
-
-**Casos de uso**:
-- Pausar temporalmente un símbolo (enabled: false)
-- Cambiar prioridades dinámicamente
-- Reactivar símbolos pausados
-
----
-
-#### `DELETE /watchlist/{symbol}`
-**Descripción**: Elimina completamente un símbolo de la watchlist. El símbolo dejará de ser procesado por el scheduler inmediatamente.
-
-**Parámetros de URL**:
-- `{symbol}`: Símbolo a eliminar (case-insensitive)
-
-**Respuesta exitosa** (204): Sin contenido
-
-**Errores**:
-- `400`: Símbolo no encontrado
-
-**Ejemplo de error**:
-```json
-{
-  "error": "symbol not found"
-}
-```
-
-**Comportamiento**:
-- Elimina el símbolo permanentemente de la watchlist
-- Los datos en cache de quotes NO se eliminan
-- El scheduler dejará de actualizar este símbolo inmediatamente
-
-**Casos de uso**:
-- Limpiar símbolos que ya no se monitoreán
-- Reducir carga del scheduler
-- Gestión de la watchlist
-
----
-
-### ℹ️ Información y Metadata
-
-#### `GET /info/endpoints`
-**Descripción**: Devuelve documentación interactiva de todos los endpoints disponibles con sus parámetros y descripciones. Útil para discovery y documentación automática.
-
-**Parámetros**: Ninguno
-
-**Respuesta** (200):
-```json
-{
-  "endpoints": [
-    {
-      "path": "/health",
-      "method": "GET", 
-      "description": "Application health and cache status"
-    },
-    {
-      "path": "/quotes",
-      "method": "GET",
-      "description": "Get current quotes for symbols",
-      "parameters": {
-        "symbols": "Comma-separated list of symbols (e.g., AAPL,TSLA,MSFT.MX)"
-      }
-    },
-    {
-      "path": "/historical",
-      "method": "GET",
-      "description": "Get historical candle data",
-      "parameters": {
-        "symbol": "Single symbol (e.g., AAPL)",
-        "from": "Start date in ISO-8601 format (e.g., 2024-01-01T00:00:00Z)",
-        "to": "End date in ISO-8601 format (e.g., 2024-01-02T00:00:00Z)",
-        "tf": "Timeframe (optional, default: T1D)",
-        "adjusted": "Whether to use adjusted prices (optional, default: true)"
-      }
-    },
-    {
-      "path": "/prefetch",
-      "method": "POST",
-      "description": "Force fetch current quotes for all enabled watchlist symbols"
-    },
-    {
-      "path": "/watchlist",
-      "method": "GET",
-      "description": "Get all symbols in watchlist"
-    },
-    {
-      "path": "/watchlist",
-      "method": "POST", 
-      "description": "Add symbol to watchlist",
-      "body": {
-        "symbol": "Symbol to add (required)",
-        "enabled": "Whether symbol is enabled (optional, default: true)",
-        "priority": "Symbol priority (optional)"
-      }
-    },
-    {
-      "path": "/watchlist/{symbol}",
-      "method": "PATCH",
-      "description": "Update symbol in watchlist",
-      "body": {
-        "enabled": "Whether symbol is enabled (optional)",
-        "priority": "Symbol priority (optional)"
-      }
-    },
-    {
-      "path": "/watchlist/{symbol}",
-      "method": "DELETE",
-      "description": "Remove symbol from watchlist"
-    }
-  ]
-}
-```
-
-**Casos de uso**:
-- Discovery automático de API
-- Documentación interactiva
-- Herramientas de testing automático
-
----
-
-#### `GET /info/timeframes`
-**Descripción**: Lista todos los timeframes soportados para datos históricos con sus descripciones legibles y recomendaciones de uso.
-
-**Parámetros**: Ninguno
-
-**Respuesta** (200):
-```json
-{
-  "available_timeframes": [
-    {
-      "value": "T1M",
-      "description": "1 minute"
-    },
-    {
-      "value": "T5M", 
-      "description": "5 minutes"
-    },
-    {
-      "value": "T15M",
-      "description": "15 minutes"
-    },
-    {
-      "value": "T1H",
-      "description": "1 hour"
-    },
-    {
-      "value": "T1D",
-      "description": "1 day"
-    }
-  ],
-  "default": "T1D",
-  "usage": "Use the 'value' field as the 'tf' parameter in /historical endpoint"
-}
-```
-
-**Casos de uso**:
-- Construir UI con selección de timeframes
-- Validación de parámetros en cliente
-- Documentación de opciones disponibles
-
----
-
-## ⚙️ Configuración
-
-### Variables de Entorno
-
-```bash
-# APIs de proveedores
-FINNHUB_API_KEY=tu_finnhub_key
-POLYGON_API_KEY=tu_polygon_key
-
-# Configuración de aplicación (opcional)
-PORT=8080
-NEW_RELIC_APP_NAME=price-fetcher
-```
-
-### Archivo de Configuración
-
-```properties
-# application.properties
-
-# Proveedor principal para quotes
-pricefetcher.providers.primary=FINNHUB
-
-# Configuración de APIs
-pricefetcher.providers.finnhub.base-url=https://finnhub.io/api/v1
-pricefetcher.providers.finnhub.api-key=${FINNHUB_API_KEY:}
-pricefetcher.providers.polygon.base-url=https://api.polygon.io  
-pricefetcher.providers.polygon.api-key=${POLYGON_API_KEY:}
-
-# Configuración de mercado
-pricefetcher.market.timezone=America/New_York
-pricefetcher.market.schedule.premarket=06:00-09:30
-pricefetcher.market.schedule.regular=09:30-16:00
-pricefetcher.market.schedule.after=16:00-20:00
-
-# Configuración de cotizaciones
-pricefetcher.quotes.refresh-ms=2000  # Frecuencia del scheduler
-pricefetcher.quotes.ttl-seconds=45   # TTL para marcar quotes como stale
-```
-
-## 🔄 Funcionamiento Automático
-
-### Scheduler de Cotizaciones
-
-- **Frecuencia**: Cada 2 segundos (configurable)
-- **Comportamiento**: Obtiene cotizaciones para símbolos habilitados en watchlist
-- **Batch size**: Varía según fase de mercado (PRE/REGULAR/AFTER/NIGHT)
-- **Tolerancia a fallos**: Continúa con otros símbolos si alguno falla
-
-### Cache y TTL
-
-- **Quotes**: TTL de 45 segundos, después se marcan como `stale=true`
-- **Historical**: Cache permanente hasta reinicio de aplicación
-- **Thread-safe**: Implementado con `ConcurrentHashMap`
-
-### Fases de Mercado
-
-- **PRE**: 06:00-09:30 (Eastern Time)
-- **REGULAR**: 09:30-16:00 (Eastern Time)  
-- **AFTER**: 16:00-20:00 (Eastern Time)
-- **NIGHT**: Resto del tiempo
-
-## 🧪 Testing y Desarrollo
-
-### Ejecutar Tests
+### 🧪 Testing
 
 ```bash
 # Todos los tests
 ./gradlew test
 
 # Tests específicos
-./gradlew test --tests "*QuotesControllerTest"
+./gradlew test --tests "*SecurityTest*"
 
-# Con coverage
+# Tests con coverage
 ./gradlew test jacocoTestReport
 ```
 
-### Formato de Código
+### 📝 Estructura del Proyecto
 
-```bash
-# Verificar formato
-./gradlew ktlintCheck
-
-# Corregir formato automáticamente
-./gradlew ktlintFormat
+```
+src/main/kotlin/com/notivest/pricefetcher/
+├── 🎮 controllers/          # REST endpoints
+├── 🏢 service/             # Lógica de negocio
+├── 🌐 client/              # Integración APIs externas
+├── 💾 repositories/        # Gestión de datos/caché
+├── 🏗️ models/             # Entidades de dominio
+├── 📦 dto/                # Data Transfer Objects
+├── 🔒 security/           # Autenticación y autorización
+└── ⚙️ config/             # Configuraciones
 ```
 
-### Testing con APIs Reales
+### 🔍 Debugging
 
-Si tienes API keys reales, puedes probar:
-
+#### Logs de Desarrollo
 ```bash
-# Agregar símbolos a watchlist
-curl -X POST http://localhost:8080/watchlist \
-  -H "Content-Type: application/json" \
-  -d '{"symbol": "AAPL", "enabled": true}'
+# Habilitar logs debug para el servicio
+logging.level.com.notivest.pricefetcher=DEBUG
 
-# Forzar prefetch
-curl -X POST http://localhost:8080/prefetch
-
-# Obtener cotizaciones
-curl "http://localhost:8080/quotes?symbols=AAPL,TSLA"
-
-# Obtener históricos
-curl "http://localhost:8080/historical?symbol=AAPL&from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z&tf=T1D"
-
-# Ver información de endpoints
-curl http://localhost:8080/info/endpoints
-
-# Ver timeframes disponibles  
-curl http://localhost:8080/info/timeframes
+# Logs de seguridad
+logging.level.com.notivest.pricefetcher.security=DEBUG
 ```
 
-## 🚨 Troubleshooting
+#### Monitoreo de Requests
+Todos los requests incluyen automáticamente en los logs:
+- `requestId`: ID único del request
+- `method`: Método HTTP
+- `uri`: Endpoint llamado
+- `callType`: "gateway" o "service"
+- `callerId`: Identificación del caller
 
-### Problemas Comunes
+## 🚀 Despliegue
 
-1. **Error 404 en `/quotes`**: Símbolo no está en cache
-   - **Solución**: Agregar a watchlist y esperar scheduler, o usar `/prefetch`
+### 🐳 Docker
 
-2. **APIs rate limited**: 
-   - **Solución**: Logs mostrarán warnings, el servicio continuará con otros símbolos
-
-3. **Cache vacío**:
-   - **Solución**: Verificar API keys y conectividad en `/health`
-
-4. **Datos stale**:
-   - **Solución**: Normal si TTL expiró, scheduler actualizará automáticamente
-
-### Logs Útiles
-
-```bash
-# Ver logs en tiempo real
-docker logs -f <container-id>
-
-# Buscar errores específicos
-docker logs <container-id> 2>&1 | grep ERROR
+```dockerfile
+# Dockerfile incluido
+docker build -t price-fetcher .
+docker run -p 8080:8080 \
+  -e FINNHUB_API_KEY=your_key \
+  -e AUTH0_DOMAIN=your-domain.auth0.com \
+  price-fetcher
 ```
 
-## 🏗️ Arquitectura
+### ☁️ Producción
 
-- **Proveedores**: Finnhub (quotes) + Polygon (históricos)
-- **Cache**: In-memory con ConcurrentHashMap
-- **Persistencia**: Ninguna (MVP), se pierde al reiniciar
-- **Observabilidad**: Logs estructurados + endpoint /health
-- **Concurrencia**: Thread-safe para operaciones simultáneas
+1. **Configurar variables de entorno**:
+   ```bash
+   export SPRING_PROFILES_ACTIVE=prod
+   export FINNHUB_API_KEY=your_production_key
+   export AUTH0_DOMAIN=your-auth0-domain.auth0.com
+   ```
+
+2. **Construir aplicación**:
+   ```bash
+   ./gradlew bootJar
+   ```
+
+3. **Ejecutar**:
+   ```bash
+   java -jar build/libs/price-fetcher-0.0.1-SNAPSHOT.jar
+   ```
+
+## 📊 Monitoreo y Observabilidad
+
+### 🏥 Health Checks
+
+```bash
+curl http://localhost:8080/health
+```
+
+Respuesta incluye:
+- ✅ Estado del servicio
+- 📊 Métricas de caché
+- 📈 Estado del mercado
+- 📝 Información de watchlist
+- 🔢 Versión de la aplicación
+
+### 📋 Auditoría
+
+Los siguientes eventos se auditan automáticamente:
+- 🔐 Intentos de autenticación
+- 🚫 Fallos de autorización
+- 🔍 Validación de scopes
+- 📞 Llamadas a endpoints
+- ⏱️ Duración de requests
+
+Logs de auditoría usan el logger `AUDIT` separado para compliance.
+
+### 📈 Métricas
+
+- **Cache hits/misses**
+- **Duración de requests**
+- **Errores por endpoint**
+- **Calls por caller type**
+
+## 🤝 Contribuir
+
+### 📋 Proceso de Desarrollo
+
+1. **Fork** el repositorio
+2. **Crear** branch de feature: `git checkout -b feature/nueva-funcionalidad`
+3. **Commits** siguiendo [Conventional Commits](https://www.conventionalcommits.org/)
+4. **Tests**: Asegurar 100% de cobertura para nuevas funcionalidades
+5. **Linting**: Ejecutar `./gradlew ktlintFormat`
+6. **Pull Request** con descripción detallada
+
+### ✅ Checklist para PRs
+
+- [ ] Tests unitarios agregados/actualizados
+- [ ] Documentación actualizada
+- [ ] Linting pasando (`./gradlew ktlintCheck`)
+- [ ] Tests pasando (`./gradlew test`)
+- [ ] Configuración de seguridad revisada
+- [ ] Logs de auditoría apropiados
 
 ## 📄 Licencia
 
-[Añadir licencia según corresponda]
+Este proyecto está bajo la licencia MIT. Ver [LICENSE](LICENSE) para más detalles.
+
+## 🆘 Soporte
+
+### 🐛 Reportar Bugs
+
+1. Verificar que no exista un issue similar
+2. Incluir pasos para reproducir
+3. Incluir logs relevantes
+4. Especificar versión y entorno
+
+### 💡 Solicitar Features
+
+1. Describir el caso de uso
+2. Explicar el beneficio esperado
+3. Proponer implementación si es posible
+
+### 📞 Contacto
+
+- **Issues**: [GitHub Issues](link-to-issues)
+- **Discusiones**: [GitHub Discussions](link-to-discussions)
+- **Email**: [team@notivest.com](mailto:team@notivest.com)
 
 ---
 
-Para más información técnica, revisar el archivo `CursorContext` en el repositorio.
+## 📚 Documentación Adicional
+
+- [🔒 Guía de Seguridad](SECURITY_GUIDE.md) - Configuración detallada de seguridad
+- [🏗️ Arquitectura](docs/ARCHITECTURE.md) - Diseño técnico detallado
+- [🚀 Despliegue](docs/DEPLOYMENT.md) - Guías de despliegue por entorno
+- [📋 API Reference](docs/API.md) - Documentación completa de endpoints
+
+---
+
+*Construido con ❤️ por el equipo de Notivest*

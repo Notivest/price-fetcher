@@ -26,6 +26,6 @@ ENV PORT=8080 \
     FINNHUB_API_KEY="" \
     POLYGON_API_KEY=""
 
-EXPOSE 8080
+EXPOSE 8081
 
 ENTRYPOINT ["sh","-c","exec java -Dserver.port=$PORT -javaagent:/app/newrelic.jar -jar /app/app.jar"]

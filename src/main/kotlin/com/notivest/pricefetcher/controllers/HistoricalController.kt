@@ -25,6 +25,8 @@ class HistoricalController(
     @RequestParam tf: String = "T1D",
     @RequestParam(required = false, defaultValue = "true") adjusted: Boolean,
   ): ResponseEntity<Any> {
+    logger.debug("Getting historical data for symbol: {} from {} to {}", symbol, from, to)
+
     return try {
       // Validate inputs
       if (symbol.isBlank()) {

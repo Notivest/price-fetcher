@@ -18,6 +18,7 @@ class QuotesController(
   fun getQuotes(
     @RequestParam symbols: String,
   ): ResponseEntity<Any> {
+    logger.debug("Getting quotes for symbols: {}", symbols)
     return try {
       // Validate input
       if (symbols.isBlank()) {

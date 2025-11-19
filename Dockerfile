@@ -20,12 +20,12 @@ RUN curl -fsSL \
     https://download.newrelic.com/newrelic/java-agent/newrelic-agent/current/newrelic.jar \
     -o newrelic.jar
 
-ENV PORT=8080 \
+ENV PORT=8081 \
     NEW_RELIC_APP_NAME=price-fetcher-prod \
     NEW_RELIC_LOG_FILE_NAME=STDOUT \
     FINNHUB_API_KEY="" \
     POLYGON_API_KEY=""
 
-EXPOSE 8080
+EXPOSE 8081
 
 ENTRYPOINT ["sh","-c","exec java -Dserver.port=$PORT -javaagent:/app/newrelic.jar -jar /app/app.jar"]

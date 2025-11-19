@@ -1,14 +1,14 @@
-package com.notivest.pricefetcher.client
+package com.notivest.pricefetcher.provider.adapter
 
 import com.notivest.pricefetcher.models.CandleSeries
-import com.notivest.pricefetcher.models.Quote
 import com.notivest.pricefetcher.models.SymbolId
 import com.notivest.pricefetcher.models.Timeframe
 import java.time.Instant
 
-interface MarketDataProvider {
-  fun fetchQuotes(symbols: List<SymbolId>): List<Quote>
-
+/**
+ * Adapter responsible for obtaining and mapping historical candles from an external API.
+ */
+interface HistoricalProviderAdapter {
   fun fetchHistorical(
     symbol: SymbolId,
     from: Instant,
