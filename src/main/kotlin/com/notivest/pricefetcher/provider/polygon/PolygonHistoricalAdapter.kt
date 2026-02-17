@@ -6,6 +6,7 @@ import com.notivest.pricefetcher.models.CandleSeries
 import com.notivest.pricefetcher.models.SymbolId
 import com.notivest.pricefetcher.models.Timeframe
 import com.notivest.pricefetcher.provider.adapter.HistoricalProviderAdapter
+import com.notivest.pricefetcher.provider.ProviderRateLimitException
 import com.notivest.pricefetcher.provider.polygon.model.PolygonAggPayload
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
@@ -72,7 +73,7 @@ class PolygonHistoricalAdapter(
           .onStatus({ it == HttpStatus.TOO_MANY_REQUESTS }) { response ->
             response.bodyToMono<String>().flatMap { body ->
               logger.warn("Polygon rate limited (429) for symbol: {} - Body: {}", rawSymbol, body)
-              Mono.error(RuntimeException("Polygon rate-limited for $rawSymbol"))
+              Mono.error(ProviderRateLimitException("Polygon rate-limited for $rawSymbol"))
             }
           }
           .onStatus({ it.is4xxClientError }) { response ->
@@ -109,6 +110,8 @@ class PolygonHistoricalAdapter(
 
       logger.info("Successfully fetched and transformed {} candles for symbol: {} (timeframe: {})", items.size, symbol, timeframe)
       CandleSeries(symbol = symbol, timeframe = timeframe, items = items)
+    } catch (ex: ProviderRateLimitException) {
+      throw ex
     } catch (ex: Exception) {
       logger.error("Failed to fetch historical data for symbol {}: {} - Error type: {}", symbol, ex.message, ex::class.simpleName, ex)
       throw ex

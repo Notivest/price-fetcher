@@ -37,16 +37,27 @@ class RefreshScheduler(
         return
       }
 
+      val staleOrMissingSymbols =
+        openSymbols.filter { symbol ->
+          val (quote, stale) = quotes.get(symbol)
+          quote == null || stale
+        }
+
+      if (staleOrMissingSymbols.isEmpty()) {
+        logger.debug("All tracked quotes are fresh, skipping refresh tick")
+        return
+      }
+
       val batch = policy.batchSize(snapshot.overallPhase)
 
       logger.debug(
         "Refreshing {} symbols with batch size {} during {} phase",
-        openSymbols.size,
+        staleOrMissingSymbols.size,
         batch,
         snapshot.overallPhase,
       )
 
-      openSymbols.chunked(batch).forEach { chunk ->
+      staleOrMissingSymbols.chunked(batch).forEach { chunk ->
         try {
           val data = quoteFetchingStrategy.fetch(chunk)
           data.forEach(quotes::put)

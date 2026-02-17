@@ -4,6 +4,7 @@ import com.notivest.pricefetcher.models.Candle
 import com.notivest.pricefetcher.models.CandleSeries
 import com.notivest.pricefetcher.models.SymbolId
 import com.notivest.pricefetcher.models.Timeframe
+import com.notivest.pricefetcher.provider.ProviderRateLimitException
 import com.notivest.pricefetcher.service.MarketDataService
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -100,6 +101,23 @@ class HistoricalControllerTest {
 
         assertThat(response.statusCode.value()).isEqualTo(500)
         assertThat(response.body).isEqualTo(mapOf("error" to "Internal server error"))
+    }
+
+    @Test
+    fun `returns too many requests when provider rate-limits`() {
+        whenever(service.historical(any(), any(), any(), any(), any()))
+            .thenThrow(ProviderRateLimitException("Polygon rate-limited for AAPL"))
+
+        val response =
+            controller.historical(
+                symbol = "AAPL",
+                from = "2024-01-01T00:00:00Z",
+                to = "2024-01-02T00:00:00Z",
+                adjusted = true,
+            )
+
+        assertThat(response.statusCode.value()).isEqualTo(429)
+        assertThat(response.body).isEqualTo(mapOf("error" to "Polygon rate-limited for AAPL"))
     }
 
     @Test

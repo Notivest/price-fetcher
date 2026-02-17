@@ -2,8 +2,10 @@ package com.notivest.pricefetcher.controllers
 
 import com.notivest.pricefetcher.models.SymbolId
 import com.notivest.pricefetcher.models.Timeframe
+import com.notivest.pricefetcher.provider.ProviderRateLimitException
 import com.notivest.pricefetcher.service.MarketDataService
 import org.slf4j.LoggerFactory
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -75,6 +77,11 @@ class HistoricalController(
       logger.warn("Invalid date format: {}", e.message)
       ResponseEntity.badRequest().body(
         mapOf("error" to "Invalid date format. Use ISO-8601 format (e.g., 2024-01-01T00:00:00Z)"),
+      )
+    } catch (e: ProviderRateLimitException) {
+      logger.warn("Historical provider rate-limited for symbol {}: {}", symbol, e.message)
+      ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(
+        mapOf("error" to (e.message ?: "Historical provider rate-limited")),
       )
     } catch (e: Exception) {
       logger.error("Unexpected error fetching historical data: {}", e.message, e)

@@ -45,6 +45,8 @@ class RefreshSchedulerTest {
         marketClock = marketClock,
         policy = refreshPolicy,
       )
+
+    whenever(quoteRepository.get(any())).thenReturn(null to true)
   }
 
   @Test
@@ -111,6 +113,21 @@ class RefreshSchedulerTest {
     verify(quoteFetchingStrategy, never()).fetch(argThat { contains(symbols[0]) })
     verify(quoteFetchingStrategy).fetch(listOf(symbols[1]))
     verify(quoteRepository).put(check { require(it.symbol == symbols[1]) })
+  }
+
+  @Test
+  fun `skips refresh when all quotes are fresh`() {
+    val symbols = listOf(SymbolId.parse("AAPL"), SymbolId.parse("MSFT"))
+    whenever(watchListService.enabledSymbols()).thenReturn(symbols)
+    whenever(marketClock.snapshot(symbols)).thenReturn(snapshotFor(symbols, MarketClockPhase.REGULAR))
+    symbols.forEach { symbol ->
+      whenever(quoteRepository.get(symbol)).thenReturn(quote(symbol, "100") to false)
+    }
+
+    scheduler.tick()
+
+    verify(quoteFetchingStrategy, never()).fetch(any())
+    verify(quoteRepository, never()).put(any())
   }
 
   @Test
