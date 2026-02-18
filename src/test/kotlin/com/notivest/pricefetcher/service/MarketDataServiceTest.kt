@@ -21,6 +21,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.math.BigDecimal
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -241,6 +242,60 @@ class MarketDataServiceTest {
   }
 
   @Test
+  fun `historical daily should clamp forward fill to last closed utc day`() {
+    val inMemoryRepository = useInMemoryCandleRepository()
+    val symbol = SymbolId.parse("AMZN")
+    val startToday = Instant.now().truncatedTo(ChronoUnit.DAYS)
+    val startYesterday = startToday.minus(1, ChronoUnit.DAYS)
+    val from = startToday.minus(2, ChronoUnit.DAYS)
+    val requestedTo = startToday.plus(2, ChronoUnit.HOURS)
+    val lastClosedUtcDay = startToday.minusMillis(1)
+
+    inMemoryRepository.put(
+      CandleSeries(
+        symbol = symbol,
+        timeframe = Timeframe.T1D,
+        items =
+          listOf(
+            candle(from, 100.0),
+            candle(startYesterday, 110.0),
+          ),
+      ),
+    )
+
+    whenever(quoteRepository.get(symbol)).thenReturn(cachedQuote(symbol) to false)
+    whenever(historicalStrategy.fetch(eq(symbol), eq(startYesterday), eq(lastClosedUtcDay), eq(Timeframe.T1D))).thenReturn(
+      CandleSeries(
+        symbol = symbol,
+        timeframe = Timeframe.T1D,
+        items =
+          listOf(
+            candle(startYesterday, 111.0),
+            candle(lastClosedUtcDay, 112.0),
+          ),
+      ),
+    )
+
+    service.historical(symbol, from, requestedTo, Timeframe.T1D, adjusted = true)
+
+    verify(historicalStrategy, times(1)).fetch(eq(symbol), eq(startYesterday), eq(lastClosedUtcDay), eq(Timeframe.T1D))
+  }
+
+  @Test
+  fun `historical daily should skip provider fetch when request only covers current utc day`() {
+    useInMemoryCandleRepository()
+    val symbol = SymbolId.parse("AAPL")
+    val startToday = Instant.now().truncatedTo(ChronoUnit.DAYS)
+    val from = startToday.plus(1, ChronoUnit.HOURS)
+    val to = startToday.plus(10, ChronoUnit.HOURS)
+
+    val result = service.historical(symbol, from, to, Timeframe.T1D, adjusted = true)
+
+    verify(historicalStrategy, never()).fetch(any(), any(), any(), any())
+    assertTrue(result.items.isEmpty())
+  }
+
+  @Test
   fun `historical should coalesce concurrent requests for same symbol and range`() {
     val inMemoryRepository = useInMemoryCandleRepository()
     val symbol = SymbolId.parse("META")
@@ -317,6 +372,20 @@ class MarketDataServiceTest {
   ): Candle =
     Candle(
       ts = Instant.parse(timestamp),
+      o = BigDecimal.valueOf(close),
+      h = BigDecimal.valueOf(close),
+      l = BigDecimal.valueOf(close),
+      c = BigDecimal.valueOf(close),
+      v = 100L,
+      adjusted = true,
+    )
+
+  private fun candle(
+    timestamp: Instant,
+    close: Double,
+  ): Candle =
+    Candle(
+      ts = timestamp,
       o = BigDecimal.valueOf(close),
       h = BigDecimal.valueOf(close),
       l = BigDecimal.valueOf(close),

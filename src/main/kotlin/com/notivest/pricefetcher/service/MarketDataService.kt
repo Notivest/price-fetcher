@@ -11,6 +11,7 @@ import com.notivest.pricefetcher.service.strategy.HistoricalFetchingStrategy
 import com.notivest.pricefetcher.service.strategy.QuoteFetchingStrategy
 import org.springframework.stereotype.Service
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -90,18 +91,27 @@ class MarketDataService(
     from: Instant,
     to: Instant,
   ): CandleSeries {
+    val effectiveTo = clampToLastClosedUtcDay(to)
     var hydrated = candles.get(symbol, Timeframe.T1D)
     var coverage = dailyCoverage[symbol]
 
-    if ((hydrated == null || hydrated.items.isEmpty()) && coverage != null && isCovered(coverage, from, to)) {
+    if (effectiveTo.isBefore(from)) {
+      return selectRange(
+        hydrated ?: CandleSeries(symbol = symbol, timeframe = Timeframe.T1D, items = emptyList()),
+        from,
+        to,
+      )
+    }
+
+    if ((hydrated == null || hydrated.items.isEmpty()) && coverage != null && isCovered(coverage, from, effectiveTo)) {
       return CandleSeries(symbol = symbol, timeframe = Timeframe.T1D, items = emptyList())
     }
 
     if (hydrated == null || hydrated.items.isEmpty()) {
-      val fetched = historicalFetchingStrategy.fetch(symbol, from, to, Timeframe.T1D)
+      val fetched = historicalFetchingStrategy.fetch(symbol, from, effectiveTo, Timeframe.T1D)
       val canonical = canonicalSeries(fetched)
       candles.put(canonical)
-      dailyCoverage[symbol] = RequestedRange(from = from, to = to)
+      dailyCoverage[symbol] = RequestedRange(from = from, to = effectiveTo)
       return selectRange(canonical, from, to)
     }
 
@@ -119,10 +129,10 @@ class MarketDataService(
       coverage = coverage.copy(from = from)
     }
 
-    if (to.isAfter(coverage.to)) {
-      val forwardFill = historicalFetchingStrategy.fetch(symbol, coverage.to, to, Timeframe.T1D)
+    if (effectiveTo.isAfter(coverage.to)) {
+      val forwardFill = historicalFetchingStrategy.fetch(symbol, coverage.to, effectiveTo, Timeframe.T1D)
       hydrated = candles.append(symbol, Timeframe.T1D, canonicalCandles(forwardFill.items), DAILY_CANDLE_MAX_WINDOW)
-      coverage = coverage.copy(to = to)
+      coverage = coverage.copy(to = effectiveTo)
     }
 
     dailyCoverage[symbol] = coverage
@@ -157,6 +167,11 @@ class MarketDataService(
     from: Instant,
     to: Instant,
   ): Boolean = !from.isBefore(coverage.from) && !to.isAfter(coverage.to)
+
+  private fun clampToLastClosedUtcDay(requestedTo: Instant): Instant {
+    val lastClosedUtcDay = Instant.now().truncatedTo(ChronoUnit.DAYS).minusMillis(1)
+    return if (requestedTo.isAfter(lastClosedUtcDay)) lastClosedUtcDay else requestedTo
+  }
 
   private fun canonicalSeries(series: CandleSeries): CandleSeries =
     series.copy(
