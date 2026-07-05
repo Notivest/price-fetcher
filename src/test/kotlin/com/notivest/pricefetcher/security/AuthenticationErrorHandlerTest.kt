@@ -1,9 +1,12 @@
 package com.notivest.pricefetcher.security
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.notivest.pricefetcher.observability.CorrelationContext
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.slf4j.MDC
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
 import org.springframework.security.core.AuthenticationException
@@ -21,6 +24,12 @@ class AuthenticationErrorHandlerTest {
         handler = AuthenticationErrorHandler(objectMapper)
         request = MockHttpServletRequest()
         response = MockHttpServletResponse()
+    }
+
+    @AfterEach
+    fun tearDown() {
+        CorrelationContext.clear()
+        MDC.clear()
     }
 
     @Test
@@ -77,5 +86,18 @@ class AuthenticationErrorHandlerTest {
         val payload = objectMapper.readTree(response.contentAsString)
         assertThat(payload["error"].asText()).isEqualTo("unauthorized")
         assertThat(payload["message"].asText()).isEqualTo("Acceso no autorizado")
+    }
+
+    @Test
+    fun `includes correlation and trace identifiers when available`() {
+        CorrelationContext.setCorrelationId("corr-price-fetcher")
+        MDC.put("traceId", "trace-price-fetcher")
+        val ex = object : AuthenticationException("Missing Bearer token") {}
+
+        handler.commence(request, response, ex)
+
+        val payload = objectMapper.readTree(response.contentAsString)
+        assertThat(payload["correlationId"].asText()).isEqualTo("corr-price-fetcher")
+        assertThat(payload["traceId"].asText()).isEqualTo("trace-price-fetcher")
     }
 }

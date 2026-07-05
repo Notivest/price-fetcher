@@ -24,7 +24,7 @@ class QuotesController(
       if (symbols.isBlank()) {
         logger.warn("Empty symbols parameter provided")
         return ResponseEntity.badRequest().body(
-          mapOf("error" to "symbols parameter is required and cannot be empty"),
+          ApiErrorResponses.body("symbols parameter is required and cannot be empty"),
         )
       }
 
@@ -36,14 +36,14 @@ class QuotesController(
       if (symbolsToFetch.isEmpty()) {
         logger.warn("No valid symbols provided after parsing: {}", symbols)
         return ResponseEntity.badRequest().body(
-          mapOf("error" to "No valid symbols provided"),
+          ApiErrorResponses.body("No valid symbols provided"),
         )
       }
 
       if (symbolsToFetch.size > 50) {
         logger.warn("Too many symbols requested: {}", symbolsToFetch.size)
         return ResponseEntity.badRequest().body(
-          mapOf("error" to "Too many symbols requested (max 50)"),
+          ApiErrorResponses.body("Too many symbols requested (max 50)"),
         )
       }
 
@@ -58,12 +58,12 @@ class QuotesController(
     } catch (ex: IllegalArgumentException) {
       logger.warn("Invalid symbol format: {}", ex.message)
       ResponseEntity.badRequest().body(
-        mapOf("error" to "Invalid symbol format: ${ex.message}"),
+        ApiErrorResponses.body("Invalid symbol format: ${ex.message}"),
       )
     } catch (ex: Exception) {
       logger.error("Unexpected error fetching quotes: {}", ex.message, ex)
       ResponseEntity.internalServerError().body(
-        mapOf("error" to "Internal server error"),
+        ApiErrorResponses.body("Internal server error"),
       )
     }
   }

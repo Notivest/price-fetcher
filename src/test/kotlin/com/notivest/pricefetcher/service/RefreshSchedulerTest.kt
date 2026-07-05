@@ -6,10 +6,14 @@ import com.notivest.pricefetcher.models.MarketClockSnapshot
 import com.notivest.pricefetcher.models.Quote
 import com.notivest.pricefetcher.models.RefreshPolicy
 import com.notivest.pricefetcher.models.SymbolId
+import com.notivest.pricefetcher.observability.CorrelationContext
+import com.notivest.pricefetcher.observability.PriceFetcherMetrics
 import com.notivest.pricefetcher.repositories.interfaces.QuoteRepository
 import com.notivest.pricefetcher.service.strategy.QuoteFetchingStrategy
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.check
@@ -27,6 +31,7 @@ class RefreshSchedulerTest {
   private lateinit var quoteRepository: QuoteRepository
   private lateinit var marketClock: MarketClock
   private lateinit var refreshPolicy: RefreshPolicy
+  private lateinit var metrics: PriceFetcherMetrics
   private lateinit var scheduler: RefreshScheduler
 
   @BeforeEach
@@ -36,6 +41,7 @@ class RefreshSchedulerTest {
     quoteRepository = mock()
     marketClock = mock()
     refreshPolicy = mock()
+    metrics = mock()
 
     scheduler =
       RefreshScheduler(
@@ -44,9 +50,15 @@ class RefreshSchedulerTest {
         quotes = quoteRepository,
         marketClock = marketClock,
         policy = refreshPolicy,
+        metrics = metrics,
       )
 
     whenever(quoteRepository.get(any())).thenReturn(null to true)
+  }
+
+  @AfterEach
+  fun tearDown() {
+    CorrelationContext.clear()
   }
 
   @Test
@@ -80,6 +92,8 @@ class RefreshSchedulerTest {
 
     verify(quoteFetchingStrategy).fetch(symbols)
     quotes.forEach { verify(quoteRepository).put(it) }
+    verify(metrics, atLeastOnce()).recordBatchResult(any(), any(), any(), any())
+    verify(metrics).recordSchedulerTick(any(), any(), any(), any(), any())
   }
 
   @Test
@@ -113,6 +127,7 @@ class RefreshSchedulerTest {
     verify(quoteFetchingStrategy, never()).fetch(argThat { contains(symbols[0]) })
     verify(quoteFetchingStrategy).fetch(listOf(symbols[1]))
     verify(quoteRepository).put(check { require(it.symbol == symbols[1]) })
+    verify(metrics).recordSchedulerTick(any(), any(), any(), any(), any())
   }
 
   @Test
@@ -128,6 +143,7 @@ class RefreshSchedulerTest {
 
     verify(quoteFetchingStrategy, never()).fetch(any())
     verify(quoteRepository, never()).put(any())
+    verify(metrics).recordSchedulerTick(any(), any(), any(), any(), any())
   }
 
   @Test
@@ -167,6 +183,7 @@ class RefreshSchedulerTest {
     verify(quoteFetchingStrategy).fetch(listOf(symbols[2], symbols[3]))
     verify(quoteFetchingStrategy).fetch(listOf(symbols[4]))
     verify(quoteRepository, times(5)).put(any())
+    verify(metrics, times(3)).recordBatchResult(any(), any(), any(), any())
   }
 
   @Test
@@ -208,6 +225,7 @@ class RefreshSchedulerTest {
 
     verify(quoteFetchingStrategy).fetch(symbols)
     verify(quoteRepository, never()).put(any())
+    verify(metrics).recordBatchResult(any(), any(), any(), any())
   }
 
   @Test
@@ -223,6 +241,7 @@ class RefreshSchedulerTest {
 
     verify(quoteFetchingStrategy).fetch(symbols)
     verify(quoteRepository, never()).put(any())
+    verify(metrics).recordBatchResult(any(), any(), any(), any())
   }
 
   @Test
@@ -241,6 +260,20 @@ class RefreshSchedulerTest {
 
     verify(quoteFetchingStrategy, times(3)).fetch(any())
     verify(quoteRepository, times(150)).put(any())
+    verify(metrics, times(3)).recordBatchResult(any(), any(), any(), any())
+  }
+
+  @Test
+  fun `generates and clears correlation id for scheduler ticks`() {
+    val symbols = listOf(SymbolId.parse("AAPL"))
+    whenever(watchListService.enabledSymbols()).thenReturn(symbols)
+    whenever(marketClock.snapshot(symbols)).thenReturn(snapshotFor(symbols, MarketClockPhase.REGULAR))
+    whenever(refreshPolicy.batchSize(MarketClockPhase.REGULAR)).thenReturn(60)
+    whenever(quoteFetchingStrategy.fetch(symbols)).thenReturn(listOf(quote(symbols[0], "150")))
+
+    scheduler.tick()
+
+    kotlin.test.assertNull(CorrelationContext.currentCorrelationId())
   }
 
   private fun snapshotFor(

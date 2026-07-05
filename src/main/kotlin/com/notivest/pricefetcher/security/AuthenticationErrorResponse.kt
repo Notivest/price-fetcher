@@ -8,4 +8,6 @@ data class AuthenticationErrorResponse(
   val details: String,
   val timestamp: String = Instant.now().toString(),
   val status: Int = 401,
+  val correlationId: String? = null,
+  val traceId: String? = null,
 )

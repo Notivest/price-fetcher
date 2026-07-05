@@ -34,7 +34,7 @@ class WatchListController(
       service.add(body)
       ResponseEntity.ok().build()
     } catch (e: IllegalArgumentException) {
-      ResponseEntity.badRequest().body(mapOf("error" to e.message))
+      ResponseEntity.badRequest().body(ApiErrorResponses.body(e.message ?: "Invalid watchlist payload"))
     }
   }
 
@@ -48,7 +48,7 @@ class WatchListController(
       service.patch(symbol, body.enabled, body.priority)
       ResponseEntity.noContent().build()
     } catch (e: IllegalArgumentException) {
-      ResponseEntity.badRequest().body(mapOf("error" to e.message))
+      ResponseEntity.badRequest().body(ApiErrorResponses.body(e.message ?: "Invalid watchlist patch"))
     }
   }
 
@@ -61,7 +61,7 @@ class WatchListController(
       service.delete(symbol)
       ResponseEntity.noContent().build()
     } catch (e: IllegalArgumentException) {
-      ResponseEntity.badRequest().body(mapOf("error" to e.message))
+      ResponseEntity.badRequest().body(ApiErrorResponses.body(e.message ?: "Invalid watchlist symbol"))
     }
   }
 }

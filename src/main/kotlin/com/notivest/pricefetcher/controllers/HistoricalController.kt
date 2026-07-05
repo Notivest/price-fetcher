@@ -34,14 +34,14 @@ class HistoricalController(
       if (symbol.isBlank()) {
         logger.warn("Empty symbol parameter provided")
         return ResponseEntity.badRequest().body(
-          mapOf("error" to "symbol parameter is required and cannot be empty"),
+          ApiErrorResponses.body("symbol parameter is required and cannot be empty"),
         )
       }
 
       if (from.isBlank() || to.isBlank()) {
         logger.warn("Empty from/to parameters provided")
         return ResponseEntity.badRequest().body(
-          mapOf("error" to "from and to parameters are required"),
+          ApiErrorResponses.body("from and to parameters are required"),
         )
       }
 
@@ -54,7 +54,7 @@ class HistoricalController(
       if (fromTs.isAfter(toTs)) {
         logger.warn("Invalid date range: from {} is after to {}", from, to)
         return ResponseEntity.badRequest().body(
-          mapOf("error" to "from date must be before to date"),
+          ApiErrorResponses.body("from date must be before to date"),
         )
       }
 
@@ -71,22 +71,22 @@ class HistoricalController(
     } catch (e: IllegalArgumentException) {
       logger.warn("Invalid argument: {}", e.message)
       ResponseEntity.badRequest().body(
-        mapOf("error" to "Invalid argument: ${e.message}"),
+        ApiErrorResponses.body("Invalid argument: ${e.message}"),
       )
     } catch (e: DateTimeParseException) {
       logger.warn("Invalid date format: {}", e.message)
       ResponseEntity.badRequest().body(
-        mapOf("error" to "Invalid date format. Use ISO-8601 format (e.g., 2024-01-01T00:00:00Z)"),
+        ApiErrorResponses.body("Invalid date format. Use ISO-8601 format (e.g., 2024-01-01T00:00:00Z)"),
       )
     } catch (e: ProviderRateLimitException) {
       logger.warn("Historical provider rate-limited for symbol {}: {}", symbol, e.message)
       ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(
-        mapOf("error" to (e.message ?: "Historical provider rate-limited")),
+        ApiErrorResponses.body(e.message ?: "Historical provider rate-limited"),
       )
     } catch (e: Exception) {
       logger.error("Unexpected error fetching historical data: {}", e.message, e)
       ResponseEntity.internalServerError().body(
-        mapOf("error" to "Internal server error"),
+        ApiErrorResponses.body("Internal server error"),
       )
     }
   }

@@ -43,9 +43,9 @@ class PrefetchController(
     } catch (e: Exception) {
       logger.error("Error during prefetch: {}", e.message, e)
       ResponseEntity.internalServerError().body(
-        mapOf(
-          "error" to "Prefetch failed",
-          "message" to (e.message ?: "Unknown error"),
+        ApiErrorResponses.body(
+          error = "Prefetch failed",
+          message = e.message ?: "Unknown error",
         ),
       )
     }
